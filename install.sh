@@ -51,7 +51,7 @@ download_and_install() {
 
   local tmp
   tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' EXIT
+  trap 'rm -f "${tmp:-}"' EXIT
 
   if curl -fSL --progress-bar -o "$tmp" "$url"; then
     chmod +x "$tmp"
