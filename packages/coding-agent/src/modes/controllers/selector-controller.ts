@@ -12,6 +12,7 @@ import { ExtensionDashboard } from "../../modes/components/extensions";
 import { HistorySearchComponent } from "../../modes/components/history-search";
 import { ModelSelectorComponent } from "../../modes/components/model-selector";
 import { OAuthSelectorComponent } from "../../modes/components/oauth-selector";
+import { loadPlans, type PlanInfo, PlansSelectorComponent } from "../../modes/components/plans-selector";
 import { SessionSelectorComponent } from "../../modes/components/session-selector";
 import { SettingsSelectorComponent } from "../../modes/components/settings-selector";
 import { ToolExecutionComponent } from "../../modes/components/tool-execution";
@@ -506,6 +507,35 @@ export class SelectorController {
 				},
 			);
 			return { component: selector, focus: selector.getSessionList() };
+		});
+	}
+
+	async showPlansSelector(): Promise<void> {
+		const plansDir = settings.getPlansDirectory();
+		const plans = await loadPlans(plansDir, 5);
+		if (plans.length === 0) {
+			this.ctx.showStatus("No plans found");
+			return;
+		}
+		this.showSelector(done => {
+			const selector = new PlansSelectorComponent(
+				plans,
+				(plan: PlanInfo) => {
+					done();
+					this.ctx.editor.setText(
+						`Read plan://${plan.id}/plan.md and summarize it, then ask me what I'd like to do with it.`,
+					);
+					this.ctx.ui.requestRender();
+				},
+				() => {
+					done();
+					this.ctx.ui.requestRender();
+				},
+				() => {
+					void this.ctx.shutdown();
+				},
+			);
+			return { component: selector, focus: selector.getPlanList() };
 		});
 	}
 

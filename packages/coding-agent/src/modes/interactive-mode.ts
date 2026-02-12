@@ -981,6 +981,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#selectorController.showSessionSelector();
 	}
 
+	showPlansSelector(): void {
+		this.#selectorController.showPlansSelector();
+	}
+
 	handleResumeSession(sessionPath: string): Promise<void> {
 		return this.#selectorController.handleResumeSession(sessionPath);
 	}

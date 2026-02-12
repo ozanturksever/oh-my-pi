@@ -163,6 +163,7 @@ export interface InteractiveModeContext {
 	showUserMessageSelector(): void;
 	showTreeSelector(): void;
 	showSessionSelector(): void;
+	showPlansSelector(): void;
 	handleResumeSession(sessionPath: string): Promise<void>;
 	showOAuthSelector(mode: "login" | "logout"): Promise<void>;
 	showHookConfirm(title: string, message: string): Promise<boolean>;
