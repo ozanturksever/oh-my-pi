@@ -143,6 +143,7 @@ const BUILTIN_SLASH_COMMAND_DEFS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "compact", description: "Manually compact the session context", inlineHint: "[focus instructions]" },
 	{ name: "handoff", description: "Hand off session context to a new session", inlineHint: "[focus instructions]" },
 	{ name: "resume", description: "Resume a different session" },
+	{ name: "plans", description: "Browse recent plans" },
 	{ name: "background", description: "Detach UI and continue running in background" },
 	{ name: "debug", description: "Write debug log (TUI state and messages)" },
 	{ name: "move", description: "Move session to a different working directory", inlineHint: "<path>" },
