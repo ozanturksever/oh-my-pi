@@ -5,7 +5,7 @@ set -euo pipefail
 
 REPO="ozanturksever/oh-my-pi"
 INSTALL_DIR="${OMP_INSTALL_DIR:-$HOME/.local/bin}"
-BINARY_NAME="omp"
+BINARY_NAME="oomp"
 
 # --- helpers ---
 
@@ -40,7 +40,7 @@ get_latest_version() {
 }
 
 download_and_install() {
-  local asset_name="omp-${PLATFORM}-${ARCH}"
+  local asset_name="oomp-${PLATFORM}-${ARCH}"
   local url="https://github.com/$REPO/releases/download/$VERSION/$asset_name"
 
   echo "Installing $BINARY_NAME $VERSION ($PLATFORM/$ARCH)..."
@@ -81,7 +81,7 @@ download_and_install() {
 
 # --- main ---
 
-echo "omp installer (fork: $REPO)"
+echo "oomp installer (fork: $REPO)"
 echo ""
 
 detect_platform

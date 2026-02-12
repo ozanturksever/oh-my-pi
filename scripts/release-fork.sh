@@ -18,7 +18,7 @@ else
 fi
 
 TAG="v${VERSION}"
-echo "Releasing $TAG to fork..."
+echo "Releasing oomp $TAG to fork..."
 
 # Ensure we're pushing to the fork
 ORIGIN_URL="$(git remote get-url origin)"
