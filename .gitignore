@@ -49,3 +49,4 @@ __pycache__/
 target/
 
 *.node
+packages/coding-agent/binaries/
