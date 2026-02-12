@@ -18,6 +18,8 @@ export { appKey, appKeyHint, editorKey, keyHint, rawKeyHint } from "./keybinding
 export { LoginDialogComponent } from "./login-dialog";
 export { ModelSelectorComponent } from "./model-selector";
 export { OAuthSelectorComponent } from "./oauth-selector";
+export type { PlanInfo } from "./plans-selector";
+export { loadPlans, PlansSelectorComponent } from "./plans-selector";
 export { QueueModeSelectorComponent } from "./queue-mode-selector";
 export { ReadToolGroupComponent } from "./read-tool-group";
 export { SessionSelectorComponent } from "./session-selector";

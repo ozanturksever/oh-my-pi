@@ -552,6 +552,35 @@ export class SelectorController {
 		});
 	}
 
+	async showPlansSelector(): Promise<void> {
+		const plansDir = settings.getPlansDirectory();
+		const plans = await loadPlans(plansDir, 5);
+		if (plans.length === 0) {
+			this.ctx.showStatus("No plans found");
+			return;
+		}
+		this.showSelector(done => {
+			const selector = new PlansSelectorComponent(
+				plans,
+				(plan: PlanInfo) => {
+					done();
+					this.ctx.editor.setText(
+						`Read plan://${plan.id}/plan.md and summarize it, then ask me what I'd like to do with it.`,
+					);
+					this.ctx.ui.requestRender();
+				},
+				() => {
+					done();
+					this.ctx.ui.requestRender();
+				},
+				() => {
+					void this.ctx.shutdown();
+				},
+			);
+			return { component: selector, focus: selector.getPlanList() };
+		});
+	}
+
 	async handleResumeSession(sessionPath: string): Promise<void> {
 		// Stop loading animation
 		if (this.ctx.loadingAnimation) {
@@ -710,3 +739,5 @@ export class SelectorController {
 		});
 	}
 }
+
+import { loadPlans, type PlanInfo, PlansSelectorComponent } from "../components/plans-selector";

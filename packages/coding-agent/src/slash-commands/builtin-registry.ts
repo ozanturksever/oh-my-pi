@@ -453,3 +453,12 @@ export async function executeBuiltinSlashCommand(text: string, runtime: BuiltinS
 	await command.handle(parsed, runtime);
 	return true;
 }
+
+	{
+		name: "plans",
+		description: "Browse and resume recent plans",
+		handle: (_command, runtime) => {
+			runtime.ctx.showPlansSelector();
+			runtime.ctx.editor.setText("");
+		},
+	},
