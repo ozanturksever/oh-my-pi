@@ -54,3 +54,5 @@ pi-*.html
 
 # Generated files
 packages/coding-agent/src/internal-urls/docs-index.generated.ts
+*.node
+packages/coding-agent/binaries/
