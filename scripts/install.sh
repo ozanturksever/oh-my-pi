@@ -173,8 +173,34 @@ install_via_bun() {
             exit 1
         }
     else
-        bun install -g "$PACKAGE" || {
-            echo "Failed to install $PACKAGE"
+        # Fork: always install from source via git clone, never from npm
+        REF="main"
+        if ! has_git; then
+            echo "git is required for source install from fork"
+            exit 1
+        fi
+
+        TMP_DIR="$(mktemp -d)"
+        trap 'rm -rf "$TMP_DIR"' EXIT
+
+        if git clone --depth 1 --branch "$REF" "https://github.com/${REPO}.git" "$TMP_DIR" >/dev/null 2>&1; then
+            :
+        else
+            git clone "https://github.com/${REPO}.git" "$TMP_DIR"
+            (cd "$TMP_DIR" && git checkout "$REF")
+        fi
+
+        if has_git_lfs; then
+            (cd "$TMP_DIR" && git lfs pull)
+        fi
+
+        if [ ! -d "$TMP_DIR/packages/coding-agent" ]; then
+            echo "Expected package at ${TMP_DIR}/packages/coding-agent"
+            exit 1
+        fi
+
+        bun install -g "$TMP_DIR/packages/coding-agent" || {
+            echo "Failed to install from source"
             exit 1
         }
     fi
@@ -262,12 +288,7 @@ case "$MODE" in
         install_binary
         ;;
     *)
-        # Default: use bun if available, otherwise binary
-        if has_bun; then
-            require_bun_version
-            install_via_bun
-        else
-            install_binary
-        fi
+        # Default: binary install for fork
+        install_binary
         ;;
 esac
