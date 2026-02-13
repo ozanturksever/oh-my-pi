@@ -63,6 +63,7 @@ bun build --compile \
 bun --cwd=packages/natives run embed:native --reset
 
 BINARY="packages/coding-agent/binaries/oomp-${PLATFORM}-${ARCH}"
+NATIVE_ADDON="packages/natives/native/pi_natives.${PLATFORM}-${ARCH}.node"
 echo ""
 echo "Built: $BINARY ($(du -h "$BINARY" | cut -f1))"
 echo ""
@@ -78,10 +79,10 @@ git push origin "$TAG" --force 2>/dev/null
 # Create release (or update existing)
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
   echo "  Release $TAG exists, uploading asset..."
-  gh release upload "$TAG" "$BINARY" --repo "$REPO" --clobber
+  gh release upload "$TAG" "$BINARY" "$NATIVE_ADDON" --repo "$REPO" --clobber
 else
   echo "  Creating release $TAG..."
-  gh release create "$TAG" "$BINARY" --repo "$REPO" --title "$TAG" --generate-notes
+  gh release create "$TAG" "$BINARY" "$NATIVE_ADDON" --repo "$REPO" --title "$TAG" --generate-notes
 fi
 
 echo ""
