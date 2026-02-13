@@ -22,7 +22,7 @@ const isBunBinary =
 	import.meta.url.includes("~BUN") ||
 	import.meta.url.includes("%7EBUN");
 
-const REPO = "can1357/oh-my-pi";
+const REPO = "ozanturksever/oh-my-pi";
 const PACKAGE = "@oh-my-pi/pi-coding-agent";
 
 interface ReleaseInfo {

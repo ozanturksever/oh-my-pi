@@ -57,7 +57,7 @@ npm install -g @oh-my-pi/pi-coding-agent
 
 **Standalone binary:**
 
-Download from [GitHub Releases](https://github.com/can1357/oh-my-pi/releases):
+Download from [GitHub Releases](https://github.com/ozanturksever/oh-my-pi/releases):
 
 | Platform            | Binary                |
 | ------------------- | --------------------- |
@@ -81,7 +81,7 @@ omp-windows-x64.exe
 **Build from source** (requires [Bun](https://bun.sh) 1.0+):
 
 ```bash
-git clone https://github.com/can1357/oh-my-pi.git
+git clone https://github.com/ozanturksever/oh-my-pi.git
 cd pi-mono && npm install
 cd packages/coding-agent && npm run build:binary
 ./dist/omp

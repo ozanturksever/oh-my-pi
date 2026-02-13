@@ -1,12 +1,12 @@
 # OMP Coding Agent Installer for Windows
-# Usage: irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/ozanturksever/oh-my-pi/main/scripts/install.ps1 | iex
 #
 # Or with options:
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1))) -Source
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1))) -Binary
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1))) -Source -Ref v3.20.1
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1))) -Source -Ref main
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1))) -Binary -Ref v3.20.1
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ozanturksever/oh-my-pi/main/scripts/install.ps1))) -Source
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ozanturksever/oh-my-pi/main/scripts/install.ps1))) -Binary
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ozanturksever/oh-my-pi/main/scripts/install.ps1))) -Source -Ref v3.20.1
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ozanturksever/oh-my-pi/main/scripts/install.ps1))) -Source -Ref main
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ozanturksever/oh-my-pi/main/scripts/install.ps1))) -Binary -Ref v3.20.1
 
 param(
     [switch]$Source,
@@ -16,10 +16,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "can1357/oh-my-pi"
+$Repo = "ozanturksever/oh-my-pi"
 $Package = "@oh-my-pi/pi-coding-agent"
-$InstallDir = if ($env:PI_INSTALL_DIR) { $env:PI_INSTALL_DIR } else { "$env:LOCALAPPDATA\omp" }
-$BinaryName = "omp-windows-x64.exe"
+$InstallDir = if ($env:PI_INSTALL_DIR) { $env:PI_INSTALL_DIR } else { "$env:LOCALAPPDATA\oomp" }
+$BinaryName = "oomp-windows-x64.exe"
 $NativeAddonName = "pi_natives.win32-x64.node"
 $MinimumBunVersion = "1.3.7"
 
@@ -229,11 +229,11 @@ function Install-ViaBun {
     }
 
     Write-Host ""
-    Write-Host "✓ Installed omp via bun" -ForegroundColor Green
+    Write-Host "✓ Installed oomp via bun" -ForegroundColor Green
 
     Configure-BashShell
 
-    Write-Host "Run 'omp' to get started!"
+    Write-Host "Run 'oomp' to get started!"
 }
 
 function Install-Binary {
@@ -260,7 +260,7 @@ function Install-Binary {
     # Download binary
     $BinaryUrl = "https://github.com/$Repo/releases/download/$Latest/$BinaryName"
     Write-Host "Downloading $BinaryName..."
-    $OutPath = Join-Path $InstallDir "omp.exe"
+    $OutPath = Join-Path $InstallDir "oomp.exe"
     Invoke-WebRequest -Uri $BinaryUrl -OutFile $OutPath
 
     # Download native addon
@@ -270,7 +270,7 @@ function Install-Binary {
     Invoke-WebRequest -Uri $NativeUrl -OutFile $NativeOutPath
 
     Write-Host ""
-    Write-Host "✓ Installed omp to $OutPath" -ForegroundColor Green
+    Write-Host "✓ Installed oomp to $OutPath" -ForegroundColor Green
     Write-Host "✓ Installed native addon to $NativeOutPath" -ForegroundColor Green
 
     # Add to PATH if not already there
@@ -284,9 +284,9 @@ function Install-Binary {
     Configure-BashShell
 
     if ($needsRestart) {
-        Write-Host "Restart your terminal, then run 'omp' to get started!"
+        Write-Host "Restart your terminal, then run 'oomp' to get started!"
     } else {
-        Write-Host "Run 'omp' to get started!"
+        Write-Host "Run 'oomp' to get started!"
     }
 }
 

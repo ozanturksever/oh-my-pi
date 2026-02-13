@@ -9,8 +9,8 @@ import * as path from "node:path";
 import { version } from "../package.json" with { type: "json" };
 import { $env } from "./env";
 
-/** App name (e.g. "omp") */
-export const APP_NAME: string = "omp";
+/** App name (e.g. "oomp") */
+export const APP_NAME: string = "oomp";
 
 /** Config directory name (e.g. ".omp") */
 export const CONFIG_DIR_NAME: string = ".omp";

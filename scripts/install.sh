@@ -2,7 +2,7 @@
 set -e
 
 # OMP Coding Agent Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/ozanturksever/oh-my-pi/main/scripts/install.sh | sh
 #
 # Options:
 #   --source       Install via bun (installs bun if needed)
@@ -10,7 +10,7 @@ set -e
 #   --ref <ref>    Install specific tag/commit/branch
 #   -r <ref>       Shorthand for --ref
 
-REPO="can1357/oh-my-pi"
+REPO="ozanturksever/oh-my-pi"
 PACKAGE="@oh-my-pi/pi-coding-agent"
 INSTALL_DIR="${PI_INSTALL_DIR:-$HOME/.local/bin}"
 MIN_BUN_VERSION="1.3.7"
@@ -179,8 +179,8 @@ install_via_bun() {
         }
     fi
     echo ""
-    echo "✓ Installed omp via bun"
-    echo "Run 'omp' to get started!"
+    echo "✓ Installed oomp via bun"
+    echo "Run 'oomp' to get started!"
 }
 
 # Install binary from GitHub releases
@@ -201,7 +201,7 @@ install_binary() {
         *)             echo "Unsupported architecture: $ARCH"; exit 1 ;;
     esac
 
-    BINARY="omp-${PLATFORM}-${ARCH}"
+    BINARY="oomp-${PLATFORM}-${ARCH}"
     NATIVE_ADDON="pi_natives.${PLATFORM}-${ARCH}.node"
 
     # Get release tag
@@ -230,8 +230,8 @@ install_binary() {
     # Download binary
     BINARY_URL="https://github.com/${REPO}/releases/download/${LATEST}/${BINARY}"
     echo "Downloading ${BINARY}..."
-    curl -fsSL "$BINARY_URL" -o "${INSTALL_DIR}/omp"
-    chmod +x "${INSTALL_DIR}/omp"
+    curl -fsSL "$BINARY_URL" -o "${INSTALL_DIR}/oomp"
+    chmod +x "${INSTALL_DIR}/oomp"
 
     # Download native addon
     NATIVE_URL="https://github.com/${REPO}/releases/download/${LATEST}/${NATIVE_ADDON}"
@@ -239,13 +239,13 @@ install_binary() {
     curl -fsSL "$NATIVE_URL" -o "${INSTALL_DIR}/${NATIVE_ADDON}"
 
     echo ""
-    echo "✓ Installed omp to ${INSTALL_DIR}/omp"
+    echo "✓ Installed oomp to ${INSTALL_DIR}/oomp"
     echo "✓ Installed native addon to ${INSTALL_DIR}/${NATIVE_ADDON}"
 
     # Check if in PATH
     case ":$PATH:" in
-        *":$INSTALL_DIR:"*) echo "Run 'omp' to get started!" ;;
-        *) echo "Add ${INSTALL_DIR} to your PATH, then run 'omp'" ;;
+        *":$INSTALL_DIR:"*) echo "Run 'oomp' to get started!" ;;
+        *) echo "Add ${INSTALL_DIR} to your PATH, then run 'oomp'" ;;
     esac
 }
 
