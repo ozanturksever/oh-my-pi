@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [12.1.0] - 2026-02-13
+
+### Added
+
+- Filesystem scan cache invalidation helpers (`invalidateFsScanAfterWrite`, `invalidateFsScanAfterDelete`, `invalidateFsScanAfterRename`) to properly invalidate shared caches after file mutations
+- Named discovery profile for file mention candidates to standardize cache visibility and ignore semantics across callers
+- Comprehensive `models.yml` provider integration guide documenting custom model registration, provider overrides, API adapters, merge behavior, and practical integration patterns for Ollama, vLLM, LM Studio, and proxy endpoints
+- Claude Code marketplace plugin discovery: automatically loads skills, commands, hooks, tools, and agents from `~/.claude/plugins/cache/` based on `installed_plugins.json` registry ([#48](https://github.com/can1357/oh-my-pi/issues/48))
+
+### Changed
+
+- Moved directory path utilities from `src/config.ts` to `@oh-my-pi/pi-utils/dirs` for shared use across packages
+- Updated imports throughout codebase to use centralized directory path functions from `@oh-my-pi/pi-utils/dirs`
+- Updated interactive bash terminal UI label from 'InteractiveTerm' to 'Console' for clarity
+- Enhanced bash execution environment with comprehensive non-interactive defaults for pagers, editors, and package managers to prevent command blocking and interactive prompts
+- Updated custom models configuration to use `~/.omp/agent/models.yml` (YAML format) while maintaining backward compatibility with legacy `models.json`
+
+## [12.0.0] - 2026-02-12
+
+### Added
+
+- Added `getAllServerNames()` method to MCPManager for enumerating all known servers
+
+### Changed
+
+- Changed default edit mode from `patch` to `hashline` for more precise code modifications
+- Changed `readHashLines` setting default from false to true to enable hash line reading by default
+
+### Fixed
+
+- Fixed `omp setup` crashing with uncaught exception when no component argument provided; now shows help ([#35](https://github.com/can1357/oh-my-pi/issues/35))
+- Fixed `/mcp list` showing "No MCP servers configured" when servers are loaded from discovery sources like `.claude.json`, `.cursor/mcp.json`, `.vscode/mcp.json` ([#34](https://github.com/can1357/oh-my-pi/issues/34))
+- Fixed model selector sorting to show newest models first within each provider instead of alphabetical; `-latest` aliases now appear before dated versions ([#37](https://github.com/can1357/oh-my-pi/issues/37))
+
 ## [11.14.4] - 2026-02-12
 
 ### Added

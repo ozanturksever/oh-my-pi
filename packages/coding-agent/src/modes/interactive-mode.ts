@@ -16,8 +16,8 @@ import {
 	TUI,
 } from "@oh-my-pi/pi-tui";
 import { $env, isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
+import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
-import { APP_NAME } from "../config";
 import { KeybindingsManager } from "../config/keybindings";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { type Settings, settings } from "../config/settings";
@@ -312,9 +312,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.ui.addChild(this.pendingMessagesContainer);
 		this.ui.addChild(this.statusContainer);
 		this.ui.addChild(this.todoContainer);
+		this.ui.addChild(this.statusLine); // Only renders hook statuses (main status in editor border)
 		this.ui.addChild(new Spacer(1));
 		this.ui.addChild(this.editorContainer);
-		this.ui.addChild(this.statusLine); // Only renders hook statuses (main status in editor border)
 		this.ui.setFocus(this.editor);
 
 		this.#inputController.setupKeyHandlers();

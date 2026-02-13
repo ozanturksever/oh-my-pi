@@ -10,12 +10,13 @@ import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { $env, postmortem } from "@oh-my-pi/pi-utils";
+import { VERSION } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import type { Args } from "./cli/args";
 import { processFileArguments } from "./cli/file-processor";
 import { listModels } from "./cli/list-models";
 import { selectSession } from "./cli/session-picker";
-import { findConfigFile, VERSION } from "./config";
+import { findConfigFile } from "./config";
 import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { parseModelPattern, parseModelString, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { Settings, settings } from "./config/settings";
@@ -489,6 +490,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	// Create AuthStorage and ModelRegistry upfront
 	const authStorage = await discoverAuthStorage();
 	const modelRegistry = new ModelRegistry(authStorage);
+	await modelRegistry.refresh();
 	debugStartup("main:discoverModels");
 	time("discoverModels");
 

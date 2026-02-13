@@ -8,7 +8,6 @@
 //! global offsets, optional match limits, and per-file match summaries.
 
 use std::{
-	borrow::Cow,
 	fs::File,
 	io::{self, Cursor, Read},
 	path::{Path, PathBuf},
@@ -20,7 +19,6 @@ use grep_regex::RegexMatcherBuilder;
 use grep_searcher::{
 	BinaryDetection, Searcher, SearcherBuilder, Sink, SinkContext, SinkContextKind, SinkMatch,
 };
-use ignore::WalkBuilder;
 use napi::{
 	JsString,
 	bindgen_prelude::*,
@@ -30,7 +28,7 @@ use napi_derive::napi;
 use rayon::prelude::*;
 use smallvec::SmallVec;
 
-use crate::task;
+use crate::{fs_cache, task};
 
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -89,6 +87,8 @@ pub struct GrepOptions<'env> {
 	pub multiline:      Option<bool>,
 	/// Include hidden files (default: true).
 	pub hidden:         Option<bool>,
+	/// Enable shared filesystem scan cache (default: false).
+	pub cache:          Option<bool>,
 	/// Maximum number of matches to return.
 	#[napi(js_name = "maxCount")]
 	pub max_count:      Option<u32>,
@@ -209,7 +209,7 @@ impl TypeFilter {
 	fn match_ext(&self, ext: &str) -> bool {
 		match self {
 			Self::Known { exts, .. } => exts.iter().any(|e| ext.eq_ignore_ascii_case(e)),
-			Self::Custom(ext) => ext.eq_ignore_ascii_case(ext),
+			Self::Custom(custom_ext) => ext.eq_ignore_ascii_case(custom_ext),
 		}
 	}
 
@@ -486,20 +486,6 @@ fn matches_type_filter(path: &Path, filter: &TypeFilter) -> bool {
 	filter.match_ext(ext)
 }
 
-fn normalize_relative_path<'a>(root: &Path, path: &'a Path) -> Cow<'a, str> {
-	let relative = path.strip_prefix(root).unwrap_or(path);
-	if cfg!(windows) {
-		let relative = relative.to_string_lossy();
-		if relative.contains('\\') {
-			Cow::Owned(relative.replace('\\', "/"))
-		} else {
-			relative
-		}
-	} else {
-		relative.to_string_lossy()
-	}
-}
-
 fn resolve_context(
 	context: Option<u32>,
 	context_before: Option<u32>,
@@ -628,6 +614,7 @@ struct GrepConfig {
 	ignore_case:    Option<bool>,
 	multiline:      Option<bool>,
 	hidden:         Option<bool>,
+	cache:          Option<bool>,
 	max_count:      Option<u32>,
 	offset:         Option<u32>,
 	context_before: Option<u32>,
@@ -639,45 +626,27 @@ struct GrepConfig {
 
 fn collect_files(
 	root: &Path,
+	scanned_entries: &[fs_cache::GlobMatch],
 	glob_set: Option<&GlobSet>,
-	include_hidden: bool,
 	type_filter: Option<&TypeFilter>,
 ) -> Vec<FileEntry> {
-	let mut builder = WalkBuilder::new(root);
-	builder
-		.hidden(!include_hidden)
-		.git_ignore(true)
-		.git_exclude(true)
-		.git_global(true)
-		.ignore(true)
-		.parents(true)
-		.follow_links(false)
-		.sort_by_file_path(|a, b| a.cmp(b));
-
 	let mut entries = Vec::new();
-	// Skip .git directories entirely
-	builder.filter_entry(|entry| entry.file_name().to_str() != Some(".git"));
-
-	for entry in builder.build() {
-		let Ok(entry) = entry else { continue };
-		let file_type = entry.file_type();
-		if !file_type.is_some_and(|ft| ft.is_file()) {
+	for entry in scanned_entries {
+		if entry.file_type != fs_cache::FileType::File {
 			continue;
 		}
-		let path = entry.into_path();
-		if let Some(glob_set) = glob_set {
-			let relative = path.strip_prefix(root).unwrap_or(&path);
-			if !glob_set.is_match(relative) {
-				continue;
-			}
+		if let Some(glob_set) = glob_set
+			&& !glob_set.is_match(Path::new(&entry.path))
+		{
+			continue;
 		}
+		let path = root.join(&entry.path);
 		if let Some(filter) = type_filter
 			&& !matches_type_filter(&path, filter)
 		{
 			continue;
 		}
-		let relative_path = normalize_relative_path(root, &path).into_owned();
-		entries.push(FileEntry { path, relative_path });
+		entries.push(FileEntry { path, relative_path: entry.path.clone() });
 	}
 	entries
 }
@@ -850,6 +819,7 @@ fn grep_sync(
 	let max_count = options.max_count.map(u64::from);
 	let offset = options.offset.unwrap_or(0) as u64;
 	let include_hidden = options.hidden.unwrap_or(true);
+	let use_cache = options.cache.unwrap_or(false);
 	let glob_set = compile_glob(options.glob.as_deref())?;
 	let type_filter = resolve_type_filter(options.type_filter.as_deref());
 
@@ -931,12 +901,21 @@ fn grep_sync(
 		});
 	}
 
-	let entries =
-		collect_files(&search_path, glob_set.as_ref(), include_hidden, type_filter.as_ref());
-
+	let entries = if use_cache {
+		let scan = fs_cache::get_or_scan(&search_path, include_hidden, true, &ct)?;
+		let mut entries =
+			collect_files(&search_path, &scan.entries, glob_set.as_ref(), type_filter.as_ref());
+		if entries.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
+			let fresh = fs_cache::force_rescan(&search_path, include_hidden, true, true, &ct)?;
+			entries = collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref());
+		}
+		entries
+	} else {
+		let fresh = fs_cache::force_rescan(&search_path, include_hidden, true, false, &ct)?;
+		collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref())
+	};
 	// Check cancellation before heavy work
 	ct.heartbeat()?;
-
 	if entries.is_empty() {
 		return Ok(GrepResult {
 			matches:            Vec::new(),
@@ -1124,6 +1103,7 @@ pub fn grep(
 		ignore_case,
 		multiline,
 		hidden,
+		cache,
 		max_count,
 		offset,
 		context_before,
@@ -1143,6 +1123,7 @@ pub fn grep(
 		ignore_case,
 		multiline,
 		hidden,
+		cache,
 		max_count,
 		offset,
 		context_before,
@@ -1154,148 +1135,4 @@ pub fn grep(
 
 	let ct = task::CancelToken::new(timeout_ms, signal);
 	task::blocking("grep", ct, move |ct| grep_sync(config, on_match.as_ref(), ct))
-}
-
-// =============================================================================
-// Fuzzy Find
-// =============================================================================
-
-/// Options for fuzzy file path search.
-#[napi(object)]
-pub struct FuzzyFindOptions<'env> {
-	/// Substring query to match against file paths (case-insensitive).
-	pub query:       String,
-	/// Directory to search.
-	pub path:        String,
-	/// Include hidden files (default: false).
-	pub hidden:      Option<bool>,
-	/// Respect .gitignore (default: true).
-	pub gitignore:   Option<bool>,
-	/// Maximum number of matches to return (default: 100).
-	#[napi(js_name = "maxResults")]
-	pub max_results: Option<u32>,
-	/// Abort signal for cancelling the operation.
-	pub signal:      Option<Unknown<'env>>,
-	/// Timeout in milliseconds for the operation.
-	#[napi(js_name = "timeoutMs")]
-	pub timeout_ms:  Option<u32>,
-}
-
-/// A single match in fuzzy find results.
-#[napi(object)]
-pub struct FuzzyFindMatch {
-	/// Relative path from the search root (uses `/` separators).
-	pub path:         String,
-	/// Whether this entry is a directory.
-	#[napi(js_name = "isDirectory")]
-	pub is_directory: bool,
-}
-
-/// Result of fuzzy file path search.
-#[napi(object)]
-pub struct FuzzyFindResult {
-	/// Matched entries (up to `maxResults`).
-	pub matches:       Vec<FuzzyFindMatch>,
-	/// Total number of matches found (may exceed `matches.len()`).
-	#[napi(js_name = "totalMatches")]
-	pub total_matches: u32,
-}
-
-/// Internal configuration for fuzzy find, extracted from options.
-struct FuzzyFindConfig {
-	query:       String,
-	path:        String,
-	hidden:      Option<bool>,
-	gitignore:   Option<bool>,
-	max_results: Option<u32>,
-}
-
-fn fuzzy_find_sync(config: FuzzyFindConfig, ct: task::CancelToken) -> Result<FuzzyFindResult> {
-	let root = resolve_search_path(&config.path)?;
-	let metadata = std::fs::metadata(&root)
-		.map_err(|err| Error::from_reason(format!("Path not found: {err}")))?;
-
-	if !metadata.is_dir() {
-		return Err(Error::from_reason("Path must be a directory"));
-	}
-
-	let include_hidden = config.hidden.unwrap_or(false);
-	let respect_gitignore = config.gitignore.unwrap_or(true);
-	let max_results = config.max_results.unwrap_or(100) as usize;
-	let query_lower = config.query.to_lowercase();
-
-	let mut builder = WalkBuilder::new(&root);
-	builder
-		.hidden(!include_hidden)
-		.git_ignore(respect_gitignore)
-		.git_exclude(respect_gitignore)
-		.git_global(respect_gitignore)
-		.ignore(respect_gitignore)
-		.parents(true)
-		.follow_links(false)
-		.sort_by_file_path(|a, b| a.cmp(b));
-
-	// Skip .git directories entirely
-	builder.filter_entry(|entry| entry.file_name().to_str() != Some(".git"));
-
-	let mut matches = Vec::with_capacity(max_results.min(256));
-	let mut total_matches = 0u32;
-
-	for entry in builder.build() {
-		ct.heartbeat()?;
-
-		let Ok(entry) = entry else { continue };
-		let file_type = entry.file_type();
-		let Some(ft) = file_type else { continue };
-
-		// Skip symlinks
-		if ft.is_symlink() {
-			continue;
-		}
-
-		// Skip the root directory itself
-		if entry.depth() == 0 {
-			continue;
-		}
-
-		let entry_path = entry.path();
-		let relative = normalize_relative_path(&root, entry_path);
-
-		// Case-insensitive substring match
-		if !query_lower.is_empty() && !relative.to_lowercase().contains(&query_lower) {
-			continue;
-		}
-
-		total_matches = total_matches.saturating_add(1);
-
-		if matches.len() < max_results {
-			let is_directory = ft.is_dir();
-			let path_str = if is_directory {
-				format!("{relative}/")
-			} else {
-				relative.into_owned()
-			};
-
-			matches.push(FuzzyFindMatch { path: path_str, is_directory });
-		}
-	}
-
-	Ok(FuzzyFindResult { matches, total_matches })
-}
-
-/// Fuzzy file path search for autocomplete.
-///
-/// # Arguments
-/// - `options`: Query substring, root path, and limits.
-///
-/// # Returns
-/// Matching file and directory entries.
-#[napi(js_name = "fuzzyFind")]
-pub fn fuzzy_find(options: FuzzyFindOptions<'_>) -> task::Async<FuzzyFindResult> {
-	let FuzzyFindOptions { query, path, hidden, gitignore, max_results, timeout_ms, signal } =
-		options;
-
-	let ct = task::CancelToken::new(timeout_ms, signal);
-	let config = FuzzyFindConfig { query, path, hidden, gitignore, max_results };
-	task::blocking("fuzzy_find", ct, move |ct| fuzzy_find_sync(config, ct))
 }

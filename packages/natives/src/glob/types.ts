@@ -27,8 +27,12 @@ export interface GlobOptions extends Cancellable {
 	maxResults?: number;
 	/** Respect .gitignore files (default: true). */
 	gitignore?: boolean;
+	/** Enable shared filesystem scan cache (default: false). */
+	cache?: boolean;
 	/** Sort results by mtime (most recent first) before applying limit. */
 	sortByMtime?: boolean;
+	/** Include node_modules entries even when pattern does not mention node_modules. */
+	includeNodeModules?: boolean;
 }
 
 /** A single filesystem match. */
@@ -57,5 +61,7 @@ declare module "../bindings" {
 		 * @param onMatch Optional callback for streaming matches as they are found.
 		 */
 		glob(options: GlobOptions, onMatch?: TsFunc<GlobMatch>): Promise<GlobResult>;
+		/** Invalidate the filesystem scan cache for the given path (or all caches if omitted). */
+		invalidateFsScanCache(path?: string): void;
 	}
 }

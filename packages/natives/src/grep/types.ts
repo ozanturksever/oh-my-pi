@@ -20,6 +20,8 @@ export interface GrepOptions extends Cancellable {
 	multiline?: boolean;
 	/** Include hidden files (default: true) */
 	hidden?: boolean;
+	/** Enable shared filesystem scan cache (default: false). */
+	cache?: boolean;
 	/** Maximum number of matches to return */
 	maxCount?: number;
 	/** Skip first N matches */
@@ -132,7 +134,7 @@ export interface SearchResult {
 
 /** Options for fuzzy file path search. */
 export interface FuzzyFindOptions extends Cancellable {
-	/** Substring query to match against file paths (case-insensitive). */
+	/** Fuzzy query to match against file paths (case-insensitive). */
 	query: string;
 	/** Directory to search. */
 	path: string;
@@ -140,6 +142,8 @@ export interface FuzzyFindOptions extends Cancellable {
 	hidden?: boolean;
 	/** Respect .gitignore (default: true). */
 	gitignore?: boolean;
+	/** Enable shared filesystem scan cache (default: false). */
+	cache?: boolean;
 	/** Maximum number of matches to return (default: 100). */
 	maxResults?: number;
 }
@@ -150,6 +154,8 @@ export interface FuzzyFindMatch {
 	path: string;
 	/** Whether this entry is a directory. */
 	isDirectory: boolean;
+	/** Match quality score (higher is better). */
+	score: number;
 }
 
 /** Result of fuzzy file path search. */

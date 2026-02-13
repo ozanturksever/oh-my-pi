@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { $env } from "@oh-my-pi/pi-utils";
+import { getPythonEnvDir } from "@oh-my-pi/pi-utils/dirs";
 
 const DEFAULT_ENV_ALLOWLIST = new Set([
 	"PATH",
@@ -103,6 +104,17 @@ function resolvePathKey(env: Record<string, string | undefined>): string {
 	return match ?? "PATH";
 }
 
+function resolveManagedPythonEnv(): string {
+	return getPythonEnvDir();
+}
+
+function resolveManagedPythonCandidate(): { venvPath: string; pythonPath: string } {
+	const venvPath = resolveManagedPythonEnv();
+	const binDir = process.platform === "win32" ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
+	const pythonPath = path.join(binDir, process.platform === "win32" ? "python.exe" : "python");
+	return { venvPath, pythonPath };
+}
+
 export interface PythonRuntime {
 	/** Path to python executable */
 	pythonPath: string;
@@ -182,6 +194,21 @@ export function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string
 				venvPath,
 			};
 		}
+	}
+
+	const managed = resolveManagedPythonCandidate();
+	if (fs.existsSync(managed.pythonPath)) {
+		env.VIRTUAL_ENV = managed.venvPath;
+		const pathKey = resolvePathKey(env);
+		const currentPath = env[pathKey];
+		const managedBin =
+			process.platform === "win32" ? path.join(managed.venvPath, "Scripts") : path.join(managed.venvPath, "bin");
+		env[pathKey] = currentPath ? `${managedBin}${path.delimiter}${currentPath}` : managedBin;
+		return {
+			pythonPath: resolveWindowlessPython(managed.pythonPath),
+			env,
+			venvPath: managed.venvPath,
+		};
 	}
 
 	const pythonPath = Bun.which("python") ?? Bun.which("python3");

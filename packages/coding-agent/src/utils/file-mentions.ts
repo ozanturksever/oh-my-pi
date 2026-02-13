@@ -8,11 +8,13 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import { glob } from "@oh-my-pi/pi-natives";
 import { formatHashLines } from "../patch/hashline";
 import type { FileMentionMessage } from "../session/messages";
 import { resolveReadPath } from "../tools/path-utils";
 import { formatAge } from "../tools/render-utils";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead, truncateStringToBytesFromStart } from "../tools/truncate";
+import { fuzzyMatch } from "./fuzzy";
 import { formatDimensionNote, resizeImage } from "./image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "./mime";
 
@@ -22,6 +24,27 @@ const LEADING_PUNCTUATION_REGEX = /^[`"'([{<]+/;
 const TRAILING_PUNCTUATION_REGEX = /[)\]}>.,;:!?"'`]+$/;
 const MENTION_BOUNDARY_REGEX = /[\s([{<"'`]/;
 const DEFAULT_DIR_LIMIT = 500;
+const MIN_FUZZY_QUERY_LENGTH = 5;
+const MAX_RESOLUTION_CANDIDATES = 20_000;
+const PATH_SEPARATOR_REGEX = /[/._\-\s]+/g;
+
+type MentionDiscoveryProfile = {
+	hidden: boolean;
+	gitignore: boolean;
+	includeNodeModules: boolean;
+	maxResults: number;
+	cache: boolean;
+};
+
+function getMentionCandidateDiscoveryProfile(): MentionDiscoveryProfile {
+	return {
+		hidden: true,
+		gitignore: true,
+		cache: true,
+		includeNodeModules: true,
+		maxResults: MAX_RESOLUTION_CANDIDATES,
+	};
+}
 
 // Avoid OOM when users @mention very large files. Above these limits we skip
 // auto-reading and only include the path in the message.
@@ -39,6 +62,96 @@ function sanitizeMentionPath(rawPath: string): string | null {
 	cleaned = cleaned.replace(TRAILING_PUNCTUATION_REGEX, "");
 	cleaned = cleaned.trim();
 	return cleaned.length > 0 ? cleaned : null;
+}
+
+type MentionCandidate = {
+	path: string;
+	pathLower: string;
+	normalizedPath: string;
+};
+
+function normalizeMentionQuery(query: string): string {
+	return query.toLowerCase().replace(PATH_SEPARATOR_REGEX, "");
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+	try {
+		await Bun.file(filePath).stat();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function listMentionCandidates(cwd: string): Promise<MentionCandidate[]> {
+	let entries: string[];
+	try {
+		const discoveryProfile = getMentionCandidateDiscoveryProfile();
+		const result = await glob({
+			pattern: "**/*",
+			path: cwd,
+			...discoveryProfile,
+		});
+		entries = result.matches.map(match => match.path);
+	} catch {
+		return [];
+	}
+
+	entries.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+	const candidates: MentionCandidate[] = [];
+	for (const entry of entries) {
+		const pathLower = entry.toLowerCase();
+		const normalizedPath = normalizeMentionQuery(entry);
+		if (normalizedPath.length === 0) {
+			continue;
+		}
+		candidates.push({ path: entry, pathLower, normalizedPath });
+	}
+	return candidates;
+}
+
+async function resolveMentionPath(
+	filePath: string,
+	cwd: string,
+	getMentionCandidates: () => Promise<MentionCandidate[]>,
+): Promise<string | null> {
+	const absolutePath = resolveReadPath(filePath, cwd);
+	if (await pathExists(absolutePath)) {
+		return filePath;
+	}
+
+	const queryLower = filePath.toLowerCase();
+	const candidates = await getMentionCandidates();
+	const prefixMatches = candidates.filter(candidate => candidate.pathLower.startsWith(queryLower));
+	if (prefixMatches.length === 1) {
+		return prefixMatches[0]?.path ?? null;
+	}
+	if (prefixMatches.length > 1) {
+		return null;
+	}
+
+	const normalizedQuery = normalizeMentionQuery(filePath);
+	if (normalizedQuery.length < MIN_FUZZY_QUERY_LENGTH) {
+		return null;
+	}
+
+	const scored = candidates
+		.map(candidate => ({ candidate, match: fuzzyMatch(normalizedQuery, candidate.normalizedPath) }))
+		.filter(entry => entry.match.matches)
+		.sort((a, b) => {
+			if (a.match.score !== b.match.score) {
+				return a.match.score - b.match.score;
+			}
+			return a.candidate.path.localeCompare(b.candidate.path);
+		});
+
+	if (scored.length === 0) {
+		return null;
+	}
+
+	const best = scored[0];
+
+	return best?.candidate.path ?? null;
 }
 
 function buildTextOutput(textContent: string): { output: string; lineCount: number } {
@@ -175,15 +288,23 @@ export async function generateFileMentionMessages(
 	const autoResizeImages = options?.autoResizeImages ?? true;
 
 	const files: FileMentionMessage["files"] = [];
+	let mentionCandidatesPromise: Promise<MentionCandidate[]> | null = null;
+	const getMentionCandidates = (): Promise<MentionCandidate[]> => {
+		mentionCandidatesPromise ??= listMentionCandidates(cwd);
+		return mentionCandidatesPromise;
+	};
 
 	for (const filePath of filePaths) {
-		const absolutePath = resolveReadPath(filePath, cwd);
-
+		const resolvedPath = await resolveMentionPath(filePath, cwd, getMentionCandidates);
+		if (!resolvedPath) {
+			continue;
+		}
+		const absolutePath = resolveReadPath(resolvedPath, cwd);
 		try {
 			const stat = await Bun.file(absolutePath).stat();
 			if (stat.isDirectory()) {
 				const { output, lineCount } = await buildDirectoryListing(absolutePath);
-				files.push({ path: filePath, content: output, lineCount });
+				files.push({ path: resolvedPath, content: output, lineCount });
 				continue;
 			}
 
@@ -191,7 +312,7 @@ export async function generateFileMentionMessages(
 			if (mimeType) {
 				if (stat.size > MAX_AUTO_READ_IMAGE_BYTES) {
 					files.push({
-						path: filePath,
+						path: resolvedPath,
 						content: `(skipped auto-read: too large, ${formatSize(stat.size)})`,
 						byteSize: stat.size,
 						skippedReason: "tooLarge",
@@ -221,13 +342,13 @@ export async function generateFileMentionMessages(
 					}
 				}
 
-				files.push({ path: filePath, content: dimensionNote ?? "", image });
+				files.push({ path: resolvedPath, content: dimensionNote ?? "", image });
 				continue;
 			}
 
 			if (stat.size > MAX_AUTO_READ_TEXT_BYTES) {
 				files.push({
-					path: filePath,
+					path: resolvedPath,
 					content: `(skipped auto-read: too large, ${formatSize(stat.size)})`,
 					byteSize: stat.size,
 					skippedReason: "tooLarge",
@@ -240,7 +361,7 @@ export async function generateFileMentionMessages(
 			if (options?.useHashLines) {
 				output = formatHashLines(output);
 			}
-			files.push({ path: filePath, content: output, lineCount });
+			files.push({ path: resolvedPath, content: output, lineCount });
 		} catch {
 			// File doesn't exist or isn't readable - skip silently
 		}

@@ -1,109 +1,79 @@
-//! Filesystem discovery with glob patterns and ignore rules.
+//! Filesystem discovery with glob patterns, ignore semantics, and shared scan
+//! caching.
 //!
 //! # Overview
-//! Walks a directory tree, applies glob matching, and reports file types while
-//! optionally respecting .gitignore rules.
+//! Resolves a search root, obtains scanned entries via [`fs_cache`], applies
+//! glob matching plus optional file-type filtering, and optionally streams each
+//! accepted match through a callback.
+//!
+//! The walker always skips `.git`, and skips `node_modules` unless explicitly
+//! requested.
 //!
 //! # Example
 //! ```ignore
-//! // JS: await native.find({ pattern: "*.rs", path: "." })
+//! // JS: await native.glob({ pattern: "*.rs", path: "." })
 //! ```
 
-use std::{
-	borrow::Cow,
-	path::{Path, PathBuf},
-};
+use std::path::Path;
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use ignore::WalkBuilder;
 use napi::{
 	bindgen_prelude::*,
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 };
 use napi_derive::napi;
 
-use crate::task;
+// Re-export entry types so existing `glob::FileType` / `glob::GlobMatch` paths still work.
+pub use crate::fs_cache::{FileType, GlobMatch};
+use crate::{fs_cache, task};
 
-/// Options for discovering files and directories.
+/// Input options for `glob`, including traversal, filtering, and cancellation.
 #[napi(object)]
 pub struct GlobOptions<'env> {
 	/// Glob pattern to match (e.g., "*.ts").
-	pub pattern:       String,
+	pub pattern:              String,
 	/// Directory to search.
-	pub path:          String,
+	pub path:                 String,
 	/// Filter by file type: "file", "dir", or "symlink".
 	#[napi(js_name = "fileType")]
-	pub file_type:     Option<FileType>,
+	pub file_type:            Option<FileType>,
 	/// Include hidden files (default: false).
-	pub hidden:        Option<bool>,
+	pub hidden:               Option<bool>,
 	/// Maximum number of results to return.
 	#[napi(js_name = "maxResults")]
-	pub max_results:   Option<u32>,
+	pub max_results:          Option<u32>,
 	/// Respect .gitignore files (default: true).
-	pub gitignore:     Option<bool>,
+	pub gitignore:            Option<bool>,
+	/// Enable shared filesystem scan cache (default: false).
+	pub cache:                Option<bool>,
 	/// Sort results by mtime (most recent first) before applying limit.
 	#[napi(js_name = "sortByMtime")]
-	pub sort_by_mtime: Option<bool>,
+	pub sort_by_mtime:        Option<bool>,
+	/// Include `node_modules` entries when the pattern does not explicitly
+	/// mention them.
+	#[napi(js_name = "includeNodeModules")]
+	pub include_node_modules: Option<bool>,
 	/// Abort signal for cancelling the operation.
-	pub signal:        Option<Unknown<'env>>,
+	pub signal:               Option<Unknown<'env>>,
 	/// Timeout in milliseconds for the operation.
 	#[napi(js_name = "timeoutMs")]
-	pub timeout_ms:    Option<u32>,
+	pub timeout_ms:           Option<u32>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[napi]
-pub enum FileType {
-	File    = 1,
-	Dir     = 2,
-	Symlink = 3,
-}
-
-/// A single filesystem match.
-#[derive(Clone)]
-#[napi(object)]
-pub struct GlobMatch {
-	/// Relative path from the search root, using forward slashes.
-	pub path:      String,
-	/// Resolved filesystem type for the match.
-	#[napi(js_name = "fileType")]
-	pub file_type: FileType,
-	/// Modification time in milliseconds since epoch (if available).
-	pub mtime:     Option<f64>,
-}
-
-/// Result of a find operation.
+/// Result payload returned by a glob operation.
 #[napi(object)]
 pub struct GlobResult {
 	/// Matched filesystem entries.
 	pub matches:       Vec<GlobMatch>,
-	/// Number of matches returned after limits are applied.
-	#[napi(js_name = "totalMatches")]
+	/// Number of returned matches (`matches.len()`), clamped to `u32::MAX`.
 	pub total_matches: u32,
-}
-
-fn resolve_search_path(path: &str) -> Result<PathBuf> {
-	let candidate = PathBuf::from(path);
-	let root = if candidate.is_absolute() {
-		candidate
-	} else {
-		let cwd = std::env::current_dir()
-			.map_err(|err| Error::from_reason(format!("Failed to resolve cwd: {err}")))?;
-		cwd.join(candidate)
-	};
-	let metadata = std::fs::metadata(&root)
-		.map_err(|err| Error::from_reason(format!("Path not found: {err}")))?;
-	if !metadata.is_dir() {
-		return Err(Error::from_reason("Search path must be a directory".to_string()));
-	}
-	Ok(root)
 }
 
 fn build_glob_pattern(glob: &str) -> String {
 	let normalized = if cfg!(windows) && glob.contains('\\') {
-		Cow::Owned(glob.replace('\\', "/"))
+		std::borrow::Cow::Owned(glob.replace('\\', "/"))
 	} else {
-		Cow::Borrowed(glob)
+		std::borrow::Cow::Borrowed(glob)
 	};
 	if normalized.contains('/') || normalized.starts_with("**") {
 		normalized.into_owned()
@@ -123,60 +93,9 @@ fn compile_glob(glob: &str) -> Result<GlobSet> {
 		.map_err(|err| Error::from_reason(format!("Failed to build glob matcher: {err}")))
 }
 
-fn normalize_relative_path<'a>(root: &Path, path: &'a Path) -> Cow<'a, str> {
-	let relative = path.strip_prefix(root).unwrap_or(path);
-	if cfg!(windows) {
-		let relative = relative.to_string_lossy();
-		if relative.contains('\\') {
-			Cow::Owned(relative.replace('\\', "/"))
-		} else {
-			relative
-		}
-	} else {
-		relative.to_string_lossy()
-	}
-}
-
-fn contains_component(path: &Path, target: &str) -> bool {
-	path.components().any(|component| {
-		component
-			.as_os_str()
-			.to_str()
-			.is_some_and(|value| value == target)
-	})
-}
-
-fn should_skip_path(path: &Path, mentions_node_modules: bool) -> bool {
-	if contains_component(path, ".git") {
-		return true;
-	}
-	if !mentions_node_modules && contains_component(path, "node_modules") {
-		return true;
-	}
-	false
-}
-
-fn classify_file_type(path: &Path) -> Option<(FileType, Option<f64>)> {
-	let metadata = std::fs::symlink_metadata(path).ok()?;
-	let file_type = metadata.file_type();
-	let mtime_ms = metadata
-		.modified()
-		.ok()
-		.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-		.map(|d| d.as_millis() as f64);
-	if file_type.is_symlink() {
-		Some((FileType::Symlink, mtime_ms))
-	} else if file_type.is_dir() {
-		Some((FileType::Dir, mtime_ms))
-	} else {
-		Some((FileType::File, mtime_ms))
-	}
-}
-
-/// Internal configuration for the find operation, grouped to reduce parameter
-/// count.
+/// Internal runtime config for a single glob execution.
 struct GlobConfig {
-	root:                  PathBuf,
+	root:                  std::path::PathBuf,
 	pattern:               String,
 	include_hidden:        bool,
 	file_type_filter:      Option<FileType>,
@@ -184,93 +103,92 @@ struct GlobConfig {
 	use_gitignore:         bool,
 	mentions_node_modules: bool,
 	sort_by_mtime:         bool,
+	use_cache:             bool,
 }
 
+/// Filter and collect matching entries from a pre-scanned list.
+fn filter_entries(
+	entries: &[GlobMatch],
+	glob_set: &GlobSet,
+	config: &GlobConfig,
+	on_match: Option<&ThreadsafeFunction<GlobMatch>>,
+	ct: &task::CancelToken,
+) -> Result<Vec<GlobMatch>> {
+	let mut matches = Vec::new();
+	if config.max_results == 0 {
+		return Ok(matches);
+	}
+
+	for entry in entries {
+		ct.heartbeat()?;
+		if fs_cache::should_skip_path(Path::new(&entry.path), config.mentions_node_modules) {
+			// Apply post-scan node_modules policy before glob matching.
+			continue;
+		}
+		if !glob_set.is_match(&entry.path) {
+			continue;
+		}
+		if config
+			.file_type_filter
+			.is_some_and(|filter| filter != entry.file_type)
+		{
+			continue;
+		}
+		if let Some(callback) = on_match {
+			callback.call(Ok(entry.clone()), ThreadsafeFunctionCallMode::NonBlocking);
+		}
+
+		matches.push(entry.clone());
+		// Only early-break when not sorting; mtime sort requires full candidate set.
+		if !config.sort_by_mtime && matches.len() >= config.max_results {
+			break;
+		}
+	}
+	Ok(matches)
+}
+
+/// Executes matching/filtering over scanned entries and optionally streams each
+/// hit.
 fn run_glob(
 	config: GlobConfig,
 	on_match: Option<&ThreadsafeFunction<GlobMatch>>,
 	ct: task::CancelToken,
 ) -> Result<GlobResult> {
-	let GlobConfig {
-		root,
-		pattern,
-		include_hidden,
-		file_type_filter,
-		max_results,
-		use_gitignore,
-		mentions_node_modules,
-		sort_by_mtime,
-	} = config;
+	let glob_set = compile_glob(&config.pattern)?;
+	if config.max_results == 0 {
+		return Ok(GlobResult { matches: Vec::new(), total_matches: 0 });
+	}
 
-	let glob_set = compile_glob(&pattern)?;
-	let mut builder = WalkBuilder::new(&root);
-	builder
-		.hidden(!include_hidden)
-		.follow_links(false)
-		.sort_by_file_path(|a, b| a.cmp(b));
-
-	if use_gitignore {
-		builder
-			.git_ignore(true)
-			.git_exclude(true)
-			.git_global(true)
-			.ignore(true)
-			.parents(true);
+	let mut matches = if config.use_cache {
+		let scan =
+			fs_cache::get_or_scan(&config.root, config.include_hidden, config.use_gitignore, &ct)?;
+		let mut matches = filter_entries(&scan.entries, &glob_set, &config, on_match, &ct)?;
+		// Empty-result recheck: if we got zero matches from a cached scan that's old
+		// enough, force a rescan and try once more before returning empty.
+		if matches.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
+			let fresh = fs_cache::force_rescan(
+				&config.root,
+				config.include_hidden,
+				config.use_gitignore,
+				true,
+				&ct,
+			)?;
+			matches = filter_entries(&fresh, &glob_set, &config, on_match, &ct)?;
+		}
+		matches
 	} else {
-		builder
-			.git_ignore(false)
-			.git_exclude(false)
-			.git_global(false)
-			.ignore(false)
-			.parents(false);
-	}
+		let fresh = fs_cache::force_rescan(
+			&config.root,
+			config.include_hidden,
+			config.use_gitignore,
+			false,
+			&ct,
+		)?;
+		filter_entries(&fresh, &glob_set, &config, on_match, &ct)?
+	};
 
-	let mut matches = Vec::new();
-	if max_results == 0 {
-		return Ok(GlobResult { matches, total_matches: 0 });
-	}
-
-	for entry in builder.build() {
-		// Check for cancellation
-		ct.heartbeat()?;
-
-		let Ok(entry) = entry else { continue };
-		let path = entry.path();
-		if should_skip_path(path, mentions_node_modules) {
-			continue;
-		}
-		let relative = normalize_relative_path(&root, path);
-		if relative.is_empty() {
-			continue;
-		}
-		if !glob_set.is_match(relative.as_ref()) {
-			continue;
-		}
-		let Some((file_type, mtime)) = classify_file_type(path) else {
-			continue;
-		};
-		if file_type_filter.is_some_and(|filter| filter != file_type) {
-			continue;
-		}
-
-		let found = GlobMatch { path: relative.into_owned(), file_type, mtime };
-
-		// Call streaming callback if provided
-		if let Some(callback) = on_match {
-			callback.call(Ok(found.clone()), ThreadsafeFunctionCallMode::NonBlocking);
-		}
-
-		matches.push(found);
-
-		// Only limit during iteration if NOT sorting by mtime
-		// (sorting requires collecting all matches first)
-		if !sort_by_mtime && matches.len() >= max_results {
-			break;
-		}
-	}
-
-	// Sort by mtime (most recent first) if requested
-	if sort_by_mtime {
+	if config.sort_by_mtime {
+		// Sorting mode: rank by mtime descending, then apply max-results truncation.
 		matches.sort_by(|a, b| {
 			let a_mtime = a.mtime.unwrap_or(0.0);
 			let b_mtime = b.mtime.unwrap_or(0.0);
@@ -278,20 +196,24 @@ fn run_glob(
 				.partial_cmp(&a_mtime)
 				.unwrap_or(std::cmp::Ordering::Equal)
 		});
-		matches.truncate(max_results);
+		matches.truncate(config.max_results);
 	}
-
 	let total_matches = matches.len().min(u32::MAX as usize) as u32;
 	Ok(GlobResult { matches, total_matches })
 }
 
 /// Find filesystem entries matching a glob pattern.
 ///
-/// Uses the provided options to resolve the search root, apply glob
-/// matching, and optionally stream matches to a callback.
+/// Resolves the search root, scans entries, applies glob and optional file-type
+/// filters, and optionally streams each accepted match through `on_match`.
+///
+/// If `sortByMtime` is enabled, all matching entries are collected, sorted by
+/// descending mtime, then truncated to `maxResults`.
 ///
 /// # Errors
-/// Returns an error if the glob is invalid or the search path is missing.
+/// Returns an error when the search path cannot be resolved, the path is not a
+/// directory, the glob pattern is invalid, or cancellation/timeout is
+/// triggered.
 #[napi(js_name = "glob")]
 pub fn glob(
 	options: GlobOptions<'_>,
@@ -307,6 +229,8 @@ pub fn glob(
 		max_results,
 		gitignore,
 		sort_by_mtime,
+		cache,
+		include_node_modules,
 		timeout_ms,
 		signal,
 	} = options;
@@ -320,13 +244,15 @@ pub fn glob(
 	task::blocking("glob", ct, move |ct| {
 		run_glob(
 			GlobConfig {
-				root: resolve_search_path(&path)?,
+				root: fs_cache::resolve_search_path(&path)?,
 				include_hidden: hidden.unwrap_or(false),
 				file_type_filter: file_type,
 				max_results: max_results.map_or(usize::MAX, |value| value as usize),
 				use_gitignore: gitignore.unwrap_or(true),
-				mentions_node_modules: pattern.contains("node_modules"),
+				mentions_node_modules: include_node_modules
+					.unwrap_or_else(|| pattern.contains("node_modules")),
 				sort_by_mtime: sort_by_mtime.unwrap_or(false),
+				use_cache: cache.unwrap_or(false),
 				pattern,
 			},
 			on_match.as_ref(),

@@ -5,6 +5,27 @@ import { fuzzyFind } from "@oh-my-pi/pi-natives";
 
 const PATH_DELIMITERS = new Set([" ", "\t", '"', "'", "="]);
 
+function buildAutocompleteFuzzyDiscoveryProfile(
+	query: string,
+	basePath: string,
+): {
+	query: string;
+	path: string;
+	maxResults: number;
+	hidden: boolean;
+	gitignore: boolean;
+	cache: boolean;
+} {
+	return {
+		query,
+		path: basePath,
+		maxResults: 100,
+		hidden: true,
+		gitignore: true,
+		cache: true,
+	};
+}
+
 function findLastDelimiter(text: string): number {
 	for (let i = text.length - 1; i >= 0; i -= 1) {
 		if (PATH_DELIMITERS.has(text[i] ?? "")) {
@@ -172,10 +193,13 @@ export interface AutocompleteProvider {
 	getInlineHint?(lines: string[], cursorLine: number, cursorCol: number): string | null;
 }
 
-// Combined provider that handles both slash commands and file paths
+// Combined provider that handles both slash commands and file paths.
 export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	#commands: (SlashCommand | AutocompleteItem)[];
 	#basePath: string;
+	// Intentionally separate from pi-natives cache: this cache is a local,
+	// per-directory readdir fast-path for prefix completions. Global fuzzy
+	// discovery continues to use native fuzzyFind + shared scan cache.
 	#dirCache: Map<string, { entries: fs.Dirent[]; timestamp: number }> = new Map();
 	readonly #DIR_CACHE_TTL = 2000; // 2 seconds
 
@@ -603,59 +627,15 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		}
 	}
 
-	// Score an entry against the query (higher = better match)
-	// isDirectory adds bonus to prioritize folders
-	#scoreEntry(filePath: string, query: string, isDirectory: boolean): number {
-		const fileName = path.basename(filePath);
-		const lowerFileName = fileName.toLowerCase();
-		const lowerQuery = query.toLowerCase();
-
-		let score = 0;
-
-		// Exact filename match (highest)
-		if (lowerFileName === lowerQuery) score = 100;
-		// Filename starts with query
-		else if (lowerFileName.startsWith(lowerQuery)) score = 80;
-		// Substring match in filename
-		else if (lowerFileName.includes(lowerQuery)) score = 50;
-		// Substring match in full path
-		else if (filePath.toLowerCase().includes(lowerQuery)) score = 30;
-
-		// Directories get a bonus to appear first
-		if (isDirectory && score > 0) score += 10;
-
-		return score;
-	}
-
 	async #getFuzzyFileSuggestions(query: string, options: { isQuotedPrefix: boolean }): Promise<AutocompleteItem[]> {
 		try {
-			const result = await fuzzyFind({
-				query,
-				path: this.#basePath,
-				maxResults: 100,
-				hidden: true,
-				gitignore: true,
-			});
-
+			const result = await fuzzyFind(buildAutocompleteFuzzyDiscoveryProfile(query, this.#basePath));
 			const filteredMatches = result.matches.filter(entry => {
 				const p = entry.path.endsWith("/") ? entry.path.slice(0, -1) : entry.path;
 				const normalized = p.replaceAll("\\", "/");
-				// Exclude the `.git` directory (including when the path ends with `/.git`).
-				// Must only match a full path segment to avoid excluding `.gitignore`, `foo.git`, etc.
 				return !/(^|\/)\.git(\/|$)/.test(normalized);
 			});
-
-			const scoredEntries = filteredMatches
-				.map(entry => ({
-					path: entry.path,
-					isDirectory: entry.isDirectory,
-					score: query ? this.#scoreEntry(entry.path, query, entry.isDirectory) : 1,
-				}))
-				.filter(entry => entry.score > 0);
-
-			scoredEntries.sort((a, b) => b.score - a.score);
-			const topEntries = scoredEntries.slice(0, 20);
-
+			const topEntries = filteredMatches.slice(0, 20);
 			const suggestions: AutocompleteItem[] = [];
 			for (const { path: entryPath, isDirectory } of topEntries) {
 				const pathWithoutSlash = isDirectory ? entryPath.slice(0, -1) : entryPath;
@@ -665,14 +645,12 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 					isAtPrefix: true,
 					isQuotedPrefix: options.isQuotedPrefix,
 				});
-
 				suggestions.push({
 					value,
 					label: entryName + (isDirectory ? "/" : ""),
 					description: pathWithoutSlash,
 				});
 			}
-
 			return suggestions;
 		} catch {
 			return [];

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [12.1.0] - 2026-02-13
+### Added
+
+- Added `cache` option to `glob()`, `grep()`, and `fuzzyFind()` to enable shared filesystem scan caching
+- Added `invalidateFsScanCache()` function to manually invalidate filesystem scan cache entries
+
 ## [11.14.0] - 2026-02-12
 ### Added
 

@@ -1,10 +1,8 @@
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
+import { getSessionsDir } from "@oh-my-pi/pi-utils/dirs";
 import type { MessageStats, SessionEntry, SessionMessageEntry } from "./types";
-
-const SESSIONS_DIR = path.join(os.homedir(), ".omp", "agent", "sessions");
 
 /**
  * Extract folder name from session filename.
@@ -72,12 +70,16 @@ export async function parseSessionFile(
 	for (const line of lines) {
 		const lineLength = line.length + 1; // +1 for newline
 		if (line.trim()) {
-			const entry = JSON.parse(line) as SessionEntry;
-			if (currentOffset >= fromOffset && entry && isAssistantMessage(entry)) {
-				const msgStats = extractStats(sessionPath, folder, entry);
-				if (msgStats) {
-					stats.push(msgStats);
+			try {
+				const entry = JSON.parse(line) as SessionEntry;
+				if (currentOffset >= fromOffset && entry && isAssistantMessage(entry)) {
+					const msgStats = extractStats(sessionPath, folder, entry);
+					if (msgStats) {
+						stats.push(msgStats);
+					}
 				}
+			} catch {
+				// Skip malformed JSONL lines
 			}
 		}
 		currentOffset += lineLength;
@@ -91,8 +93,9 @@ export async function parseSessionFile(
  */
 export async function listSessionFolders(): Promise<string[]> {
 	try {
-		const entries = await fs.readdir(SESSIONS_DIR, { withFileTypes: true });
-		return entries.filter(e => e.isDirectory()).map(e => path.join(SESSIONS_DIR, e.name));
+		const sessionsDir = getSessionsDir();
+		const entries = await fs.readdir(sessionsDir, { withFileTypes: true });
+		return entries.filter(e => e.isDirectory()).map(e => path.join(sessionsDir, e.name));
 	} catch {
 		return [];
 	}
@@ -123,13 +126,6 @@ export async function listAllSessionFiles(): Promise<string[]> {
 	}
 
 	return allFiles;
-}
-
-/**
- * Get session directory path.
- */
-export function getSessionsDir(): string {
-	return SESSIONS_DIR;
 }
 
 /**
