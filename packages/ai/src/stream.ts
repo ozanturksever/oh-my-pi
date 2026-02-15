@@ -345,6 +345,7 @@ function mapOptionsForApi<TApi extends Api>(
 		headers: options?.headers,
 		maxRetryDelayMs: options?.maxRetryDelayMs,
 		sessionId: options?.sessionId,
+		providerSessionState: options?.providerSessionState,
 		onPayload: options?.onPayload,
 		execHandlers: options?.execHandlers,
 	};
@@ -470,6 +471,7 @@ function mapOptionsForApi<TApi extends Api>(
 				...base,
 				reasoningEffort: supportsXhigh(model) ? options?.reasoning : clampReasoning(options?.reasoning),
 				toolChoice: mapOpenAiToolChoice(options?.toolChoice),
+				preferWebsockets: options?.preferWebsockets,
 			} as OptionsForApi<TApi>;
 
 		case "google-generative-ai": {

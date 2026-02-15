@@ -1,8 +1,9 @@
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
+import { prewarmOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { $env, logger, postmortem } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { getAgentDbPath, getAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
@@ -45,6 +46,7 @@ import {
 } from "./internal-urls";
 import { disposeAllKernelSessions } from "./ipy/executor";
 import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp";
+import { buildMemoryToolDeveloperInstructions, startMemoryStartupTask } from "./memories";
 import { AgentSession } from "./session/agent-session";
 import { AuthStorage } from "./session/auth-storage";
 import { convertToLlm } from "./session/messages";
@@ -85,7 +87,7 @@ const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.w
 
 // Types
 export interface CreateAgentSessionOptions {
-	/** Working directory for project-local discovery. Default: process.cwd() */
+	/** Working directory for project-local discovery. Default: getProjectDir() */
 	cwd?: string;
 	/** Global config directory. Default: ~/.omp/agent */
 	agentDir?: string;
@@ -240,7 +242,7 @@ export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir(
  * Discover extensions from cwd.
  */
 export async function discoverExtensions(cwd?: string): Promise<LoadExtensionsResult> {
-	const resolvedCwd = cwd ?? process.cwd();
+	const resolvedCwd = cwd ?? getProjectDir();
 
 	return discoverAndLoadExtensions([], resolvedCwd);
 }
@@ -255,7 +257,7 @@ export async function discoverSkills(
 ): Promise<{ skills: Skill[]; warnings: SkillWarning[] }> {
 	return await loadSkillsInternal({
 		...settings,
-		cwd: cwd ?? process.cwd(),
+		cwd: cwd ?? getProjectDir(),
 	});
 }
 
@@ -268,7 +270,7 @@ export async function discoverContextFiles(
 	_agentDir?: string,
 ): Promise<Array<{ path: string; content: string; depth?: number }>> {
 	return await loadContextFilesInternal({
-		cwd: cwd ?? process.cwd(),
+		cwd: cwd ?? getProjectDir(),
 	});
 }
 
@@ -277,7 +279,7 @@ export async function discoverContextFiles(
  */
 export async function discoverPromptTemplates(cwd?: string, agentDir?: string): Promise<PromptTemplate[]> {
 	return await loadPromptTemplatesInternal({
-		cwd: cwd ?? process.cwd(),
+		cwd: cwd ?? getProjectDir(),
 		agentDir: agentDir ?? getDefaultAgentDir(),
 	});
 }
@@ -286,14 +288,14 @@ export async function discoverPromptTemplates(cwd?: string, agentDir?: string): 
  * Discover file-based slash commands from commands/ directories.
  */
 export async function discoverSlashCommands(cwd?: string): Promise<FileSlashCommand[]> {
-	return loadSlashCommandsInternal({ cwd: cwd ?? process.cwd() });
+	return loadSlashCommandsInternal({ cwd: cwd ?? getProjectDir() });
 }
 
 /**
  * Discover custom commands (TypeScript slash commands) from cwd and agentDir.
  */
 export async function discoverCustomTSCommands(cwd?: string, agentDir?: string): Promise<CustomCommandsLoadResult> {
-	const resolvedCwd = cwd ?? process.cwd();
+	const resolvedCwd = cwd ?? getProjectDir();
 	const resolvedAgentDir = agentDir ?? getDefaultAgentDir();
 
 	return loadCustomCommandsInternal({
@@ -307,7 +309,7 @@ export async function discoverCustomTSCommands(cwd?: string, agentDir?: string):
  * Returns the manager and loaded tools.
  */
 export async function discoverMCPServers(cwd?: string): Promise<MCPToolsLoadResult> {
-	const resolvedCwd = cwd ?? process.cwd();
+	const resolvedCwd = cwd ?? getProjectDir();
 	return discoverAndLoadMCPTools(resolvedCwd);
 }
 
@@ -439,6 +441,58 @@ function createCustomToolsExtension(tools: CustomTool[]): ExtensionFactory {
 		api.on("session_shutdown", async (_event, ctx) =>
 			runOnSession({ reason: "shutdown", previousSessionFile: undefined }, ctx),
 		);
+		api.on("auto_compaction_start", async (event, ctx) =>
+			runOnSession({ reason: "auto_compaction_start", trigger: event.reason }, ctx),
+		);
+		api.on("auto_compaction_end", async (event, ctx) =>
+			runOnSession(
+				{
+					reason: "auto_compaction_end",
+					result: event.result,
+					aborted: event.aborted,
+					willRetry: event.willRetry,
+					errorMessage: event.errorMessage,
+				},
+				ctx,
+			),
+		);
+		api.on("auto_retry_start", async (event, ctx) =>
+			runOnSession(
+				{
+					reason: "auto_retry_start",
+					attempt: event.attempt,
+					maxAttempts: event.maxAttempts,
+					delayMs: event.delayMs,
+					errorMessage: event.errorMessage,
+				},
+				ctx,
+			),
+		);
+		api.on("auto_retry_end", async (event, ctx) =>
+			runOnSession(
+				{
+					reason: "auto_retry_end",
+					success: event.success,
+					attempt: event.attempt,
+					finalError: event.finalError,
+				},
+				ctx,
+			),
+		);
+		api.on("ttsr_triggered", async (event, ctx) =>
+			runOnSession({ reason: "ttsr_triggered", rules: event.rules }, ctx),
+		);
+		api.on("todo_reminder", async (event, ctx) =>
+			runOnSession(
+				{
+					reason: "todo_reminder",
+					todos: event.todos,
+					attempt: event.attempt,
+					maxAttempts: event.maxAttempts,
+				},
+				ctx,
+			),
+		);
 	};
 }
 
@@ -469,7 +523,7 @@ function createCustomToolsExtension(tools: CustomTool[]): ExtensionFactory {
  *   model: myModel,
  *   getApiKey: async () => Bun.env.MY_KEY,
  *   systemPrompt: 'You are helpful.',
- *   tools: codingTools({ cwd: process.cwd() }),
+ *   tools: codingTools({ cwd: getProjectDir() }),
  *   skills: [],
  *   sessionManager: SessionManager.inMemory(),
  * });
@@ -477,7 +531,7 @@ function createCustomToolsExtension(tools: CustomTool[]): ExtensionFactory {
  */
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
 	debugStartup("sdk:createAgentSession:entry");
-	const cwd = options.cwd ?? process.cwd();
+	const cwd = options.cwd ?? getProjectDir();
 	const agentDir = options.agentDir ?? getDefaultAgentDir();
 	const eventBus = options.eventBus ?? new EventBus();
 
@@ -913,6 +967,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const rebuildSystemPrompt = async (toolNames: string[], tools: Map<string, AgentTool>): Promise<string> => {
 		toolContextStore.setToolNames(toolNames);
+		const memoryInstructions = await buildMemoryToolDeveloperInstructions(agentDir, settings);
 		const defaultPrompt = await buildSystemPromptInternal({
 			cwd,
 			skills,
@@ -922,6 +977,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			toolNames,
 			rules: rulebookRules,
 			skillsSettings: settings.getGroup("skills") as SkillsSettings,
+			appendSystemPrompt: memoryInstructions,
 		});
 
 		if (options.systemPrompt === undefined) {
@@ -938,6 +994,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				rules: rulebookRules,
 				skillsSettings: settings.getGroup("skills") as SkillsSettings,
 				customPrompt: options.systemPrompt,
+				appendSystemPrompt: memoryInstructions,
 			});
 		}
 		return options.systemPrompt(defaultPrompt);
@@ -1016,6 +1073,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		.map(name => toolRegistry.get(name))
 		.filter((tool): tool is AgentTool => tool !== undefined);
 
+	const openaiWebsocketSetting = settings.get("providers.openaiWebsockets") ?? "auto";
+	const preferOpenAICodexWebsockets =
+		openaiWebsocketSetting === "on" ? true : openaiWebsocketSetting === "off" ? false : undefined;
+
 	agent = new Agent({
 		initialState: {
 			systemPrompt,
@@ -1036,6 +1097,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingBudgets: settings.getGroup("thinkingBudgets"),
 		temperature: settings.get("temperature") >= 0 ? settings.get("temperature") : undefined,
 		kimiApiFormat: settings.get("providers.kimiApiFormat") ?? "anthropic",
+		preferWebsockets: preferOpenAICodexWebsockets,
 		getToolContext: tc => toolContextStore.getContext(tc),
 		getApiKey: async provider => {
 			// Use the provider argument from the in-flight request;
@@ -1087,6 +1149,26 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	debugStartup("sdk:createAgentSession");
 	time("createAgentSession");
 
+	if (model?.api === "openai-codex-responses") {
+		try {
+			debugStartup("sdk:prewarmCodexWebsocket:start");
+			await prewarmOpenAICodexResponses(model, {
+				apiKey: await modelRegistry.getApiKey(model, sessionId),
+				sessionId,
+				preferWebsockets: preferOpenAICodexWebsockets,
+				providerSessionState: session.providerSessionState,
+			});
+			debugStartup("sdk:prewarmCodexWebsocket:done");
+			time("prewarmCodexWebsocket");
+		} catch (error) {
+			logger.debug("Codex websocket prewarm failed", {
+				error: error instanceof Error ? error.message : String(error),
+				provider: model.provider,
+				model: model.id,
+			});
+		}
+	}
+
 	// Warm up LSP servers (connects to detected servers)
 	let lspServers: CreateAgentSessionResult["lspServers"];
 	if (enableLsp && settings.get("lsp.diagnosticsOnWrite")) {
@@ -1106,6 +1188,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			logger.warn("LSP server warmup failed", { cwd, error: String(error) });
 		}
 	}
+
+	startMemoryStartupTask({
+		session,
+		settings,
+		modelRegistry,
+		agentDir,
+		taskDepth,
+	});
 
 	debugStartup("sdk:return");
 	return {

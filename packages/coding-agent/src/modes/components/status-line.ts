@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
 import { settings } from "../../config/settings";
 import type { StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle } from "../../config/settings-schema";
@@ -41,7 +42,7 @@ function sanitizeStatusText(text: string): string {
 
 /** Find the git root directory by walking up from cwd */
 function findGitHeadPath(): string | null {
-	let dir = process.cwd();
+	let dir = getProjectDir();
 	while (true) {
 		const gitHeadPath = path.join(dir, ".git", "HEAD");
 		if (fs.existsSync(gitHeadPath)) {
@@ -69,6 +70,7 @@ export class StatusLineComponent implements Component {
 	#subagentCount: number = 0;
 	#sessionStartTime: number = Date.now();
 	#planModeStatus: { enabled: boolean; paused: boolean } | null = null;
+	#sttState: "idle" | "recording" | "transcribing" = "idle";
 
 	// Git status caching (1s TTL)
 	#cachedGitStatus: { staged: number; unstaged: number; untracked: number } | null = null;
@@ -103,6 +105,10 @@ export class StatusLineComponent implements Component {
 
 	setPlanModeStatus(status: { enabled: boolean; paused: boolean } | undefined): void {
 		this.#planModeStatus = status ?? null;
+	}
+
+	setSttState(state: "idle" | "recording" | "transcribing"): void {
+		this.#sttState = state;
 	}
 
 	setHookStatus(key: string, text: string | undefined): void {
@@ -266,6 +272,7 @@ export class StatusLineComponent implements Component {
 			autoCompactEnabled: this.#autoCompactEnabled,
 			subagentCount: this.#subagentCount,
 			sessionStartTime: this.#sessionStartTime,
+			sttState: this.#sttState,
 			git: {
 				branch: this.#getCurrentBranch(),
 				status: this.#getGitStatus(),

@@ -16,7 +16,7 @@ import {
 	TUI,
 } from "@oh-my-pi/pi-tui";
 import { $env, isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
-import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
+import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -30,6 +30,7 @@ import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
 import { HistoryStorage } from "../session/history-storage";
 import type { SessionContext, SessionManager } from "../session/session-manager";
 import { getRecentSessions } from "../session/session-manager";
+import { STTController, type SttState } from "../stt";
 import type { ExitPlanModeDetails } from "../tools";
 import { setTerminalTitle } from "../utils/title-generator";
 import type { AssistantMessageComponent } from "./components/assistant-message";
@@ -152,6 +153,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	readonly #inputController: InputController;
 	readonly #selectorController: SelectorController;
 	readonly #uiHelpers: UiHelpers;
+	#sttController: STTController | undefined;
 
 	constructor(
 		session: AgentSession,
@@ -249,7 +251,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#cleanupUnsubscribe = postmortem.register("session-manager-flush", () => this.sessionManager.flush());
 		debugStartup("InteractiveMode.init:cleanupRegistered");
 
-		await this.refreshSlashCommandState(process.cwd());
+		await this.refreshSlashCommandState(getProjectDir());
 		debugStartup("InteractiveMode.init:slashCommands");
 
 		// Get current model info for welcome screen
@@ -709,6 +711,10 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.loadingAnimation.stop();
 			this.loadingAnimation = undefined;
 		}
+		if (this.#sttController) {
+			this.#sttController.dispose();
+			this.#sttController = undefined;
+		}
 		this.statusLine.dispose();
 		if (this.unsubscribe) {
 			this.unsubscribe();
@@ -917,6 +923,29 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	handleMoveCommand(targetPath: string): Promise<void> {
 		return this.#commandController.handleMoveCommand(targetPath);
+	}
+
+	handleMemoryCommand(text: string): Promise<void> {
+		return this.#commandController.handleMemoryCommand(text);
+	}
+
+	async handleSTTToggle(): Promise<void> {
+		if (!settings.get("stt.enabled")) {
+			this.showWarning("Speech-to-text is disabled. Enable it in settings: stt.enabled");
+			return;
+		}
+		if (!this.#sttController) {
+			this.#sttController = new STTController();
+		}
+		await this.#sttController.toggle(this.editor, {
+			showWarning: (msg: string) => this.showWarning(msg),
+			showStatus: (msg: string) => this.showStatus(msg),
+			onStateChange: (state: SttState) => {
+				this.statusLine.setSttState(state);
+				this.updateEditorTopBorder();
+				this.ui.requestRender();
+			},
+		});
 	}
 
 	showDebugSelector(): void {

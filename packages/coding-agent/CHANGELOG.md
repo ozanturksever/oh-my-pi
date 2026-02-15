@@ -1,7 +1,104 @@
 # Changelog
 
 ## [Unreleased]
+### Added
 
+- Added `abort_and_prompt` RPC command for atomic abort-and-reprompt without race conditions ([#357](https://github.com/can1357/oh-my-pi/pull/357))
+- Added automatic dark/light theme switching via SIGWINCH with separate `theme.dark`/`theme.light` settings, replacing the single `theme` setting ([#65](https://github.com/can1357/oh-my-pi/issues/65))
+
+### Breaking Changes
+
+- Replaced `theme` setting with `theme.dark` and `theme.light` (auto-migrated)
+
+### Fixed
+
+- Fixed `session.abort()` not clearing `promptInFlight` flag due to microtask ordering, which blocked subsequent prompts
+
+### Added
+
+- Added speech-to-text (STT) feature with `Alt+H` keybinding and `/stt` slash command
+- Added cross-platform audio recording: SoX, FFmpeg, arecord (Linux), PowerShell mciSendString (Windows fallback)
+- Added recording tool fallback chain — automatically tries each available tool in order
+- Added Python openai-whisper integration for transcription with automatic `pip install`
+- Added custom WAV-to-numpy pipeline in `transcribe.py` bypassing ffmpeg dependency
+- Added STT settings: `stt.enabled`, `stt.language`, `stt.modelName`
+- Added STT status line segment showing recording/transcribing state
+- Added `/stt` command with `on`, `off`, `status`, `setup` subcommands
+- Added auto-download of recording tools (best-effort FFmpeg via winget on Windows)
+
+
+
+### Added
+- Added interactive debug log viewer with selection, copy, and expand/collapse controls
+- Added inline filtering and count display to the debug log viewer
+- Added pid filter toggle and load-older pagination controls to the debug log viewer
+- Enabled loading older debug logs from archived files in viewer
+- Added file hyperlinks for debug report paths in viewer
+
+### Fixed
+- Sanitized debug log display to strip control codes, normalize tabs, and trim width
+
+## [12.4.0] - 2026-02-14
+### Changed
+
+- Moved `sanitizeText` function from `@oh-my-pi/pi-utils` to `@oh-my-pi/pi-natives` for better code organization
+- Replaced internal `#normalizeOutput` methods with `sanitizeText` utility function in bash and Python execution components
+- Added line length clamping (4000 characters) to bash and Python execution output to prevent display of excessively long lines
+- Modified memory storage to isolate memories by project working directory, preventing cross-project memory contamination
+
+### Fixed
+
+- Fixed bash interactive tool to gracefully handle malformed output chunks by normalizing them before display
+- Fixed fetch tool incorrectly treating HTML content as plain text or markdown
+- Fixed output truncation notice displaying incorrect byte limit when maxBytes differs from outputBytes
+- Fixed Cloudflare returning corrupted bytes when compression is negotiated in web scraper requests
+
+## [12.3.0] - 2026-02-14
+### Added
+
+- Added autonomous memory extraction and consolidation system with configurable settings
+- Added `/memory` slash command with subcommands: `view`, `clear`, `reset`, `enqueue`, `rebuild`
+- Added memory injection payload that automatically includes learned context in system prompts
+- Added two-phase memory pipeline: Stage 1 extracts durable knowledge from session history, Phase 2 consolidates into reusable skills and guidance
+- Added memory storage layer with SQLite-backed job queue for distributed memory processing
+- Added configurable memory settings: concurrency limits, lease timeouts, token budgets, and rollout age constraints
+
+### Changed
+
+- Modified system prompt building to inject memory guidance when memories are enabled
+- Changed `resolvePromptInput` to handle multiline input and improve error handling for file reads
+
+## [12.2.0] - 2026-02-13
+
+### Added
+
+- Added `providerSessionState` property to AgentSession for managing provider-scoped transport and session caches
+- Added automatic cleanup of provider session state resources on session disposal
+- Added `providers.openaiWebsockets` setting to prefer websocket transport for OpenAI Codex models
+- Added provider details display in session info showing authentication mode, transport, and connection settings
+- Added automatic prewarm of OpenAI Codex websocket connections on session creation for improved performance
+- Added real-time authentication validation in OAuth provider selector with visual status indicators (checking, valid, invalid)
+- Added `validateAuth` and `requestRender` options to OAuthSelectorComponent for custom authentication validation and UI refresh callbacks
+
+### Changed
+
+- Changed `providers.openaiWebsockets` setting from boolean to enum with values "auto", "off", "on" for more granular websocket policy control (auto uses model defaults, on forces websocket, off disables it)
+- Enhanced provider details display to include live provider session state information
+- Enhanced session info output to display active provider configuration and authentication details
+- Replaced `process.cwd()` with `getProjectDir()` throughout codebase for improved project directory detection and handling
+- Made `SessionManager.list()` async to support asynchronous session discovery operations
+- Preserved internal whitespace and indentation in bash command normalization to support heredocs and indentation-sensitive scripts
+- Improved git context loading performance with configurable timeouts and parallel status/commit queries
+- Enhanced git context reliability with better error handling for timeout and command failures
+- Changed OAuth provider selector to display live authentication status instead of static login state
+- Changed logout flow to refresh OAuth provider authentication state before showing selector
+
+### Fixed
+
+- Improved error reporting in fetch tool to include HTTP status codes when URL fetching fails
+- Fixed fetch tool to preserve actual response metadata (finalUrl, contentType) instead of defaults when requests fail
+
+||||||| parent of a70a34c8b (fix(coding-agent/debug): Sanitized debug log rendering)
 ## [12.1.0] - 2026-02-13
 
 ### Added

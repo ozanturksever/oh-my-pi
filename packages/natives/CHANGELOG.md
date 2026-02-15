@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [12.4.0] - 2026-02-14
+### Added
+
+- Exported `sanitizeText` function to strip ANSI codes, remove binary garbage, and normalize line endings in text output
+
 ## [12.1.0] - 2026-02-13
 ### Added
 
