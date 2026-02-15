@@ -29,6 +29,7 @@ import {
 import type { InteractiveModeContext } from "../../modes/types";
 import { SessionManager } from "../../session/session-manager";
 import { setPreferredImageProvider, setPreferredSearchProvider } from "../../tools";
+import { getEditorCommand } from "../../utils/external-editor";
 
 export class SelectorController {
 	constructor(private ctx: InteractiveModeContext) {}
@@ -537,6 +538,9 @@ export class SelectorController {
 					);
 					this.ctx.ui.requestRender();
 				},
+				(plan: PlanInfo) => {
+					void this.#openPlanInEditor(plan, done);
+				},
 				() => {
 					done();
 					this.ctx.ui.requestRender();
@@ -547,6 +551,27 @@ export class SelectorController {
 			);
 			return { component: selector, focus: selector.getPlanList() };
 		});
+	}
+
+	async #openPlanInEditor(plan: PlanInfo, done: () => void): Promise<void> {
+		const editorCmd = getEditorCommand();
+		if (!editorCmd) {
+			this.ctx.showStatus("No editor configured. Set $VISUAL or $EDITOR.");
+			return;
+		}
+
+		const [editor, ...editorArgs] = editorCmd.split(" ");
+		try {
+			this.ctx.ui.stop();
+			const child = Bun.spawn([editor, ...editorArgs, plan.path], {
+				stdio: ["inherit", "inherit", "inherit"],
+			});
+			await child.exited;
+		} finally {
+			this.ctx.ui.start();
+			done();
+			this.ctx.ui.requestRender();
+		}
 	}
 
 	async handleResumeSession(sessionPath: string): Promise<void> {

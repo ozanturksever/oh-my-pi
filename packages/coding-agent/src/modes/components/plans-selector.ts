@@ -106,6 +106,7 @@ class PlanList implements Component {
 	#selectedIndex = 0;
 	readonly #searchInput: Input;
 	onSelect?: (plan: PlanInfo) => void;
+	onEdit?: (plan: PlanInfo) => void;
 	onCancel?: () => void;
 	onExit: () => void = () => {};
 	#maxVisible = 5;
@@ -197,7 +198,8 @@ class PlanList implements Component {
 			const scrollText = `  (${this.#selectedIndex + 1}/${this.#filteredPlans.length})`;
 			lines.push(theme.fg("muted", truncateToWidth(scrollText, width)));
 		}
-
+		// Hint line
+		lines.push(theme.fg("muted", truncateToWidth("  Enter: load  Ctrl+E: open in editor  Esc: cancel", width)));
 		return lines;
 	}
 
@@ -215,6 +217,11 @@ class PlanList implements Component {
 			if (selected && this.onSelect) {
 				this.onSelect(selected);
 			}
+		} else if (matchesKey(keyData, "ctrl+e")) {
+			const selected = this.#filteredPlans[this.#selectedIndex];
+			if (selected && this.onEdit) {
+				this.onEdit(selected);
+			}
 		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			if (this.onCancel) {
 				this.onCancel();
@@ -231,7 +238,13 @@ class PlanList implements Component {
 export class PlansSelectorComponent extends Container {
 	#planList: PlanList;
 
-	constructor(plans: PlanInfo[], onSelect: (plan: PlanInfo) => void, onCancel: () => void, onExit: () => void) {
+	constructor(
+		plans: PlanInfo[],
+		onSelect: (plan: PlanInfo) => void,
+		onEdit: (plan: PlanInfo) => void,
+		onCancel: () => void,
+		onExit: () => void,
+	) {
 		super();
 
 		this.addChild(new Spacer(1));
@@ -242,6 +255,7 @@ export class PlansSelectorComponent extends Container {
 
 		this.#planList = new PlanList(plans);
 		this.#planList.onSelect = onSelect;
+		this.#planList.onEdit = onEdit;
 		this.#planList.onCancel = onCancel;
 		this.#planList.onExit = onExit;
 
