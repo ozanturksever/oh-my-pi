@@ -90,6 +90,42 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		},
 	},
 	{
+		name: "followloop",
+		aliases: ["floop"],
+		description: "Start/stop auto-executing followup suggestions",
+		subcommands: [{ name: "status", description: "Show current follow loop state" }],
+		allowArgs: true,
+		inlineHint: "[status | finish condition]",
+		handle: async (command, runtime) => {
+			const arg = command.args.trim();
+			if (arg === "status") {
+				const ctx = runtime.ctx;
+				if (!ctx.followLoopActive) {
+					ctx.showStatus("Follow loop: inactive");
+				} else {
+					const lines = [`Follow loop: active (iteration ${ctx.followLoopIterations})`];
+					if (ctx.followLoopFinishPrompt) {
+						lines.push(`  Finish condition: ${ctx.followLoopFinishPrompt}`);
+					}
+					const maxIter = ctx.settings.get("followup.loopMaxIterations");
+					lines.push(`  Max iterations: ${maxIter === 0 ? "unlimited" : String(maxIter)}`);
+					const mustHaves = ctx.followupSuggestions.filter(s => s.priority === "must-have");
+					const total = ctx.followupSuggestions.length;
+					lines.push(`  Pending suggestions: ${total} (${mustHaves.length} must-have)`);
+					for (const s of mustHaves) {
+						lines.push(`    - ${s.label || s.prompt.slice(0, 70)}`);
+					}
+					ctx.showStatus(lines.join("\n"), { dim: false });
+				}
+			} else if (runtime.ctx.followLoopActive) {
+				runtime.ctx.stopFollowLoop();
+			} else {
+				await runtime.ctx.startFollowLoop(arg || undefined);
+			}
+			runtime.ctx.editor.setText("");
+		},
+	},
+	{
 		name: "model",
 		aliases: ["models"],
 		description: "Select model (opens selector UI)",

@@ -70,6 +70,20 @@ const planModeSegment: StatusLineSegment = {
 	},
 };
 
+const followLoopSegment: StatusLineSegment = {
+	id: "follow_loop",
+	render(ctx) {
+		const status = ctx.followLoop;
+		if (!status || !status.active) {
+			return { content: "", visible: false };
+		}
+
+		const iterations = status.iterations ?? 0;
+		const label = iterations > 0 ? `Loop (${iterations})` : "Loop";
+		const content = withIcon("⟳", label);
+		return { content: theme.fg("accent", content), visible: true };
+	},
+};
 const pathSegment: StatusLineSegment = {
 	id: "path",
 	render(ctx) {
@@ -323,6 +337,7 @@ export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
 	pi: piSegment,
 	model: modelSegment,
 	plan_mode: planModeSegment,
+	follow_loop: followLoopSegment,
 	path: pathSegment,
 	git: gitSegment,
 	subagents: subagentsSegment,

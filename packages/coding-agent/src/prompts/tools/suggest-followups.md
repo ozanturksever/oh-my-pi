@@ -9,3 +9,4 @@ Guidelines:
 - Be specific to the codebase and recent changes, not generic
 - Do NOT suggest: committing, pushing, manual testing, reviewing code, or running formatters
 - Good suggestions: adding tests for new code, handling edge cases, refactoring related code, extending functionality, fixing related TODOs
+- Optionally include `priority`: "must-have" for critical items (tests missing, broken imports, unfinished work), "nice-to-have" for recommended improvements, "optional" for polish. Defaults to "nice-to-have".

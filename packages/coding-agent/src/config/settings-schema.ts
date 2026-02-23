@@ -75,7 +75,8 @@ export type StatusLineSegmentId =
 	| "session"
 	| "hostname"
 	| "cache_read"
-	| "cache_write";
+	| "cache_write"
+	| "follow_loop";
 
 interface UiMetadata {
 	tab: SettingTab;
@@ -229,6 +230,15 @@ export const SETTINGS_SCHEMA = {
 			tab: "agent",
 			label: "Followup suggestions",
 			description: "Suggest followup actions after each agent turn",
+		},
+	},
+	"followup.loopMaxIterations": {
+		type: "number",
+		default: 25,
+		ui: {
+			tab: "agent",
+			label: "Follow loop max iterations",
+			description: "Maximum number of auto-executed followups before the loop stops (0 = unlimited)",
 		},
 	},
 	interruptMode: {

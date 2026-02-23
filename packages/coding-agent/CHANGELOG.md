@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `priority` field (`must-have`, `nice-to-have`, `optional`) to `suggest_followups` tool for categorizing followup importance
+- Added `/followloop` command (alias `/floop`) to auto-execute must-have followup suggestions in a loop
+- Added `/followloop status` subcommand showing loop state, iteration count, finish condition, and pending suggestions
+- Added `followup.loopMaxIterations` setting to cap auto-execution iterations (default: 25, 0 for unlimited)
+- Added `follow_loop` status line segment with iteration counter
+
 ## [13.2.1] - 2026-02-23
 
 ### Changed

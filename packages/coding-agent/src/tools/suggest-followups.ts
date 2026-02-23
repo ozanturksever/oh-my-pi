@@ -16,6 +16,12 @@ const suggestFollowupsSchema = Type.Object({
 		Type.Object({
 			prompt: Type.String({ description: "Full prompt text to send as next user message" }),
 			label: Type.Optional(Type.String({ description: "Short display label (defaults to truncated prompt)" })),
+			priority: Type.Optional(
+				Type.Union([Type.Literal("must-have"), Type.Literal("nice-to-have"), Type.Literal("optional")], {
+					description:
+						"Priority level. 'must-have' for critical follow-ups, 'nice-to-have' for recommended, 'optional' for low priority. Defaults to 'nice-to-have'.",
+				}),
+			),
 		}),
 		{ minItems: 1, description: "Suggested followup actions" },
 	),
@@ -24,7 +30,7 @@ const suggestFollowupsSchema = Type.Object({
 type SuggestFollowupsParams = Static<typeof suggestFollowupsSchema>;
 
 export interface SuggestFollowupsDetails {
-	followups: Array<{ prompt: string; label?: string }>;
+	followups: Array<{ prompt: string; label?: string; priority?: "must-have" | "nice-to-have" | "optional" }>;
 }
 
 export class SuggestFollowupsTool implements AgentTool<typeof suggestFollowupsSchema, SuggestFollowupsDetails> {
@@ -57,7 +63,7 @@ export class SuggestFollowupsTool implements AgentTool<typeof suggestFollowupsSc
 // =============================================================================
 
 interface SuggestFollowupsRenderArgs {
-	followups?: Array<{ prompt?: string; label?: string }>;
+	followups?: Array<{ prompt?: string; label?: string; priority?: string }>;
 }
 
 export const suggestFollowupsToolRenderer = {

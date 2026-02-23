@@ -38,7 +38,12 @@ export class InputController {
 					this.ctx.retryEscapeHandler,
 			);
 		this.ctx.editor.onEscape = () => {
-			if (this.ctx.loadingAnimation) {
+			if (this.ctx.followLoopActive && !this.ctx.session.isStreaming) {
+				this.ctx.stopFollowLoop();
+			} else if (this.ctx.followLoopActive && this.ctx.loadingAnimation) {
+				this.ctx.stopFollowLoop();
+				this.restoreQueuedMessagesToEditor({ abort: true });
+			} else if (this.ctx.loadingAnimation) {
 				this.restoreQueuedMessagesToEditor({ abort: true });
 			} else if (this.ctx.session.isBashRunning) {
 				this.ctx.session.abortBash();
@@ -324,6 +329,10 @@ export class InputController {
 	}
 
 	handleCtrlC(): void {
+		if (this.ctx.followLoopActive) {
+			this.ctx.stopFollowLoop();
+			return;
+		}
 		const now = Date.now();
 		if (now - this.ctx.lastSigintTime < 500) {
 			void this.ctx.shutdown();

@@ -338,7 +338,11 @@ export class EventController {
 				this.ctx.ui.requestRender();
 				this.sendCompletionNotification();
 				if (this.ctx.followupSuggestions.length > 0) {
-					void this.ctx.showFollowupSelector();
+					if (this.ctx.followLoopActive) {
+						void this.ctx.autoPickFollowup();
+					} else {
+						void this.ctx.showFollowupSelector();
+					}
 				}
 				break;
 

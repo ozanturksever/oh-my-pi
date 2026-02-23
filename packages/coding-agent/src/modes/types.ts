@@ -98,7 +98,12 @@ export interface InteractiveModeContext {
 	fileSlashCommands: Set<string>;
 	skillCommands: Map<string, string>;
 	todoPhases: TodoPhase[];
-	followupSuggestions: Array<{ prompt: string; label?: string }>;
+	followupSuggestions: Array<{ prompt: string; label?: string; priority?: "must-have" | "nice-to-have" | "optional" }>;
+
+	// Follow loop state
+	followLoopActive: boolean;
+	followLoopFinishPrompt?: string;
+	followLoopIterations: number;
 
 	// Lifecycle
 	init(): Promise<void>;
@@ -164,6 +169,9 @@ export interface InteractiveModeContext {
 	handleMoveCommand(targetPath: string): Promise<void>;
 	handleMemoryCommand(text: string): Promise<void>;
 	handleFollowupCommand(): Promise<void>;
+	startFollowLoop(finishPrompt?: string): Promise<void>;
+	stopFollowLoop(): void;
+	autoPickFollowup(): Promise<void>;
 	showFollowupSelector(): Promise<void>;
 	handleSTTToggle(): Promise<void>;
 	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void>;

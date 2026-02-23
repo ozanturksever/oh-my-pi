@@ -33,6 +33,7 @@ const SEGMENT_INFO: Record<StatusLineSegmentId, { label: string; short: string }
 	hostname: { label: "Host", short: "hostname" },
 	cache_read: { label: "Cache ↓", short: "cache read" },
 	cache_write: { label: "Cache ↑", short: "cache write" },
+	follow_loop: { label: "Follow Loop", short: "loop status" },
 };
 
 type Column = "left" | "right" | "disabled";

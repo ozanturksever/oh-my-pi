@@ -103,7 +103,14 @@ export class InteractiveMode implements InteractiveModeContext {
 	planModePaused = false;
 	planModePlanFilePath: string | undefined = undefined;
 	todoPhases: TodoPhase[] = [];
-	followupSuggestions: Array<{ prompt: string; label?: string }> = [];
+	followupSuggestions: Array<{
+		prompt: string;
+		label?: string;
+		priority?: "must-have" | "nice-to-have" | "optional";
+	}> = [];
+	followLoopActive = false;
+	followLoopFinishPrompt: string | undefined = undefined;
+	followLoopIterations = 0;
 	hideThinkingBlock = false;
 	pendingImages: ImageContent[] = [];
 	compactionQueuedMessages: CompactionQueuedMessage[] = [];
@@ -744,6 +751,96 @@ export class InteractiveMode implements InteractiveModeContext {
 		} else {
 			void this.session.prompt(selected.prompt);
 		}
+		this.updatePendingMessagesDisplay();
+		this.ui.requestRender();
+	}
+
+	async startFollowLoop(finishPrompt?: string): Promise<void> {
+		// Ensure followup suggestions are enabled
+		const followupEnabled = this.settings.get("followup.enabled");
+		if (!followupEnabled) {
+			this.settings.set("followup.enabled", true);
+			const activeTools = this.session.getActiveToolNames();
+			if (!activeTools.includes("suggest_followups")) {
+				await this.session.setActiveToolsByName([...activeTools, "suggest_followups"]);
+			}
+		}
+		this.followLoopActive = true;
+		this.followLoopFinishPrompt = finishPrompt;
+		this.followLoopIterations = 0;
+		this.statusLine.setFollowLoopStatus({ active: true, finishPrompt, iterations: 0 });
+		this.updateEditorTopBorder();
+		this.ui.requestRender();
+		const msg = finishPrompt
+			? `Follow loop started (finish: ${finishPrompt.slice(0, 60)}${finishPrompt.length > 60 ? "..." : ""})`
+			: "Follow loop started";
+		this.showStatus(msg);
+	}
+
+	stopFollowLoop(): void {
+		this.followLoopActive = false;
+		this.followLoopFinishPrompt = undefined;
+		this.followLoopIterations = 0;
+		this.statusLine.setFollowLoopStatus(undefined);
+		this.updateEditorTopBorder();
+		this.ui.requestRender();
+		this.showStatus("Follow loop stopped");
+	}
+
+	async autoPickFollowup(): Promise<void> {
+		const suggestions = this.followupSuggestions;
+		if (suggestions.length === 0) {
+			this.stopFollowLoop();
+			return;
+		}
+
+		// Find first must-have suggestion
+		const mustHaveIdx = suggestions.findIndex(s => s.priority === "must-have");
+
+		if (mustHaveIdx === -1) {
+			// No must-have suggestions remain
+			if (this.followLoopFinishPrompt) {
+				// Send finish prompt as final evaluation
+				const finishPrompt = this.followLoopFinishPrompt;
+				this.stopFollowLoop();
+				void this.session.prompt(finishPrompt);
+				return;
+			}
+			this.stopFollowLoop();
+			// Show remaining suggestions for manual pick
+			if (suggestions.length > 0) {
+				void this.showFollowupSelector();
+			}
+			return;
+		}
+
+		// Check max iteration limit
+		const maxIterations = this.settings.get("followup.loopMaxIterations");
+		if (maxIterations > 0 && this.followLoopIterations >= maxIterations) {
+			this.showStatus(`Follow loop: reached max iterations (${maxIterations})`);
+			this.stopFollowLoop();
+			if (suggestions.length > 0) {
+				void this.showFollowupSelector();
+			}
+			return;
+		}
+
+		const selected = suggestions[mustHaveIdx];
+		this.followupSuggestions = suggestions.filter((_, i) => i !== mustHaveIdx);
+		this.followLoopIterations++;
+
+		this.statusLine.setFollowLoopStatus({
+			active: true,
+			finishPrompt: this.followLoopFinishPrompt,
+			iterations: this.followLoopIterations,
+		});
+		this.updateEditorTopBorder();
+
+		const displayLabel = selected.label || selected.prompt.slice(0, 60);
+		this.showStatus(`Follow loop (${this.followLoopIterations}): executing "${displayLabel}"`);
+
+		this.editor.addToHistory(selected.prompt);
+		void this.session.prompt(selected.prompt);
 		this.updatePendingMessagesDisplay();
 		this.ui.requestRender();
 	}
