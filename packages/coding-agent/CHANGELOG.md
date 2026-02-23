@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.3.0] - 2026-02-23
+
 ### Added
 
 - Added `priority` field (`must-have`, `nice-to-have`, `optional`) to `suggest_followups` tool for categorizing followup importance
