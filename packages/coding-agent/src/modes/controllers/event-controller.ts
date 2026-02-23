@@ -9,7 +9,7 @@ import { TtsrNotificationComponent } from "../../modes/components/ttsr-notificat
 import { getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext, TodoPhase } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
-import type { ExitPlanModeDetails } from "../../tools";
+import type { ExitPlanModeDetails, SuggestFollowupsDetails } from "../../tools";
 
 export class EventController {
 	#lastReadGroup: ReadToolGroupComponent | undefined = undefined;
@@ -306,6 +306,12 @@ export class EventController {
 						await this.ctx.handleExitPlanModeTool(details);
 					}
 				}
+				if (event.toolName === "suggest_followups" && !event.isError) {
+					const details = event.result.details as SuggestFollowupsDetails | undefined;
+					if (details?.followups) {
+						this.ctx.followupSuggestions = details.followups;
+					}
+				}
 				break;
 			}
 
@@ -331,6 +337,9 @@ export class EventController {
 				);
 				this.ctx.ui.requestRender();
 				this.sendCompletionNotification();
+				if (this.ctx.followupSuggestions.length > 0) {
+					void this.#showFollowupSelector();
+				}
 				break;
 
 			case "auto_compaction_start": {
@@ -436,6 +445,25 @@ export class EventController {
 				this.ctx.ui.requestRender();
 				break;
 			}
+		}
+	}
+
+	async #showFollowupSelector(): Promise<void> {
+		const suggestions = this.ctx.followupSuggestions;
+		if (suggestions.length === 0) return;
+
+		const labels = suggestions.map(s => s.label || s.prompt.slice(0, 80));
+		const choice = await this.ctx.showHookSelector("Suggested next steps", labels);
+
+		this.ctx.followupSuggestions = [];
+
+		if (choice === undefined) return;
+
+		const selected = suggestions[labels.indexOf(choice)];
+		if (!selected) return;
+
+		if (this.ctx.onInputCallback) {
+			this.ctx.onInputCallback({ text: selected.prompt });
 		}
 	}
 

@@ -222,6 +222,15 @@ export const SETTINGS_SCHEMA = {
 			description: "How to drain follow-up messages after a turn completes",
 		},
 	},
+	"followup.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "agent",
+			label: "Followup suggestions",
+			description: "Suggest followup actions after each agent turn",
+		},
+	},
 	interruptMode: {
 		type: "enum",
 		values: ["immediate", "wait"] as const,

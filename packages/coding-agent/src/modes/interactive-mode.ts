@@ -103,6 +103,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	planModePaused = false;
 	planModePlanFilePath: string | undefined = undefined;
 	todoPhases: TodoPhase[] = [];
+	followupSuggestions: Array<{ prompt: string; label?: string }> = [];
 	hideThinkingBlock = false;
 	pendingImages: ImageContent[] = [];
 	compactionQueuedMessages: CompactionQueuedMessage[] = [];
@@ -698,6 +699,24 @@ export class InteractiveMode implements InteractiveModeContext {
 			return;
 		}
 		await this.#enterPlanMode();
+	}
+
+	async handleFollowupCommand(): Promise<void> {
+		const current = this.settings.get("followup.enabled");
+		const next = !current;
+		this.settings.set("followup.enabled", next);
+
+		const activeTools = this.session.getActiveToolNames();
+		if (next) {
+			if (!activeTools.includes("suggest_followups")) {
+				await this.session.setActiveToolsByName([...activeTools, "suggest_followups"]);
+			}
+		} else {
+			await this.session.setActiveToolsByName(activeTools.filter(n => n !== "suggest_followups"));
+			this.followupSuggestions = [];
+		}
+
+		this.showStatus(`Followup suggestions ${next ? "enabled" : "disabled"}`);
 	}
 
 	async handleExitPlanModeTool(details: ExitPlanModeDetails): Promise<void> {

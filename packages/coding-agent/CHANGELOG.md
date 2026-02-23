@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added followup suggestions feature: after each agent turn, show ~3 contextual followup suggestions the user can select as their next prompt
+- Added `/followup` command to toggle followup suggestions on/off
+- Added `followup.enabled` setting (default: off) under Agent tab
+
 ## [13.1.2] - 2026-02-23
 ### Breaking Changes
 

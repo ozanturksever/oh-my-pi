@@ -20,6 +20,7 @@ import { notebookToolRenderer } from "./notebook";
 import { pythonToolRenderer } from "./python";
 import { readToolRenderer } from "./read";
 import { sshToolRenderer } from "./ssh";
+import { suggestFollowupsToolRenderer } from "./suggest-followups";
 import { todoWriteToolRenderer } from "./todo-write";
 import { writeToolRenderer } from "./write";
 
@@ -53,4 +54,5 @@ export const toolRenderers: Record<string, ToolRenderer> = {
 	fetch: fetchToolRenderer as ToolRenderer,
 	web_search: webSearchToolRenderer as ToolRenderer,
 	write: writeToolRenderer as ToolRenderer,
+	suggest_followups: suggestFollowupsToolRenderer as ToolRenderer,
 };

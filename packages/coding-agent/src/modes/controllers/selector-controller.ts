@@ -19,6 +19,7 @@ import {
 import type { InteractiveModeContext } from "../../modes/types";
 import { SessionManager } from "../../session/session-manager";
 import { setPreferredImageProvider, setPreferredSearchProvider } from "../../tools";
+import { getEditorCommand } from "../../utils/external-editor";
 import { AgentDashboard } from "../components/agent-dashboard";
 import { AssistantMessageComponent } from "../components/assistant-message";
 import { ExtensionDashboard } from "../components/extensions";
@@ -31,7 +32,6 @@ import { SettingsSelectorComponent } from "../components/settings-selector";
 import { ToolExecutionComponent } from "../components/tool-execution";
 import { TreeSelectorComponent } from "../components/tree-selector";
 import { UserMessageSelectorComponent } from "../components/user-message-selector";
-import { getEditorCommand } from "../../utils/external-editor";
 
 export class SelectorController {
 	constructor(private ctx: InteractiveModeContext) {}
@@ -765,4 +765,3 @@ export class SelectorController {
 		});
 	}
 }
-

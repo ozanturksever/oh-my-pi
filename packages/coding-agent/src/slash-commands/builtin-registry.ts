@@ -81,6 +81,15 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		},
 	},
 	{
+		name: "followup",
+		aliases: ["followups"],
+		description: "Toggle followup suggestions after each turn",
+		handle: async (_command, runtime) => {
+			await runtime.ctx.handleFollowupCommand();
+			runtime.ctx.editor.setText("");
+		},
+	},
+	{
 		name: "model",
 		aliases: ["models"],
 		description: "Select model (opens selector UI)",
@@ -453,12 +462,3 @@ export async function executeBuiltinSlashCommand(text: string, runtime: BuiltinS
 	await command.handle(parsed, runtime);
 	return true;
 }
-
-	{
-		name: "plans",
-		description: "Browse and resume recent plans",
-		handle: (_command, runtime) => {
-			runtime.ctx.showPlansSelector();
-			runtime.ctx.editor.setText("");
-		},
-	},

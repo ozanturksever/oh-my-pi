@@ -1165,9 +1165,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const requestedToolNames = options.toolNames ?? toolNamesFromRegistry;
 	const normalizedRequested = requestedToolNames.filter(name => toolRegistry.has(name));
 	const includeExitPlanMode = options.toolNames?.includes("exit_plan_mode") ?? false;
-	const initialToolNames = includeExitPlanMode
-		? normalizedRequested
-		: normalizedRequested.filter(name => name !== "exit_plan_mode");
+	const includeSuggestFollowups = settings.get("followup.enabled");
+	const initialToolNames = normalizedRequested.filter(name => {
+		if (name === "exit_plan_mode") return includeExitPlanMode;
+		if (name === "suggest_followups") return includeSuggestFollowups;
+		return true;
+	});
 
 	// Custom tools and extension-registered tools are always included regardless of toolNames filter
 	const alwaysInclude: string[] = [

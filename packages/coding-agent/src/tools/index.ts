@@ -31,6 +31,7 @@ import { ReadTool } from "./read";
 import { reportFindingTool } from "./review";
 import { loadSshTool } from "./ssh";
 import { SubmitResultTool } from "./submit-result";
+import { SuggestFollowupsTool } from "./suggest-followups";
 import { type TodoPhase, TodoWriteTool } from "./todo-write";
 import { WriteTool } from "./write";
 
@@ -70,6 +71,7 @@ export { ReadTool, type ReadToolDetails, type ReadToolInput } from "./read";
 export { reportFindingTool, type SubmitReviewDetails } from "./review";
 export { loadSshTool, type SSHToolDetails, SshTool } from "./ssh";
 export { SubmitResultTool } from "./submit-result";
+export { type SuggestFollowupsDetails, SuggestFollowupsTool } from "./suggest-followups";
 export {
 	getLatestTodoPhasesFromEntries,
 	type TodoItem,
@@ -180,6 +182,7 @@ export const HIDDEN_TOOLS: Record<string, ToolFactory> = {
 	submit_result: s => new SubmitResultTool(s),
 	report_finding: () => reportFindingTool,
 	exit_plan_mode: s => new ExitPlanModeTool(s),
+	suggest_followups: s => new SuggestFollowupsTool(s),
 };
 
 export type ToolName = keyof typeof BUILTIN_TOOLS;
@@ -309,6 +312,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 					...Object.entries(BUILTIN_TOOLS).filter(([name]) => isToolAllowed(name)),
 					...(includeSubmitResult ? ([["submit_result", HIDDEN_TOOLS.submit_result]] as const) : []),
 					...([["exit_plan_mode", HIDDEN_TOOLS.exit_plan_mode]] as const),
+					...([["suggest_followups", HIDDEN_TOOLS.suggest_followups]] as const),
 				];
 
 	const results = await Promise.all(
