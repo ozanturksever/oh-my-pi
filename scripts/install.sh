@@ -262,12 +262,17 @@ install_binary() {
             NATIVE_ADDON="pi_natives.${PLATFORM}-${ARCH}-${variant}.node"
             NATIVE_URL="https://github.com/${REPO}/releases/download/${LATEST}/${NATIVE_ADDON}"
             echo "Downloading ${NATIVE_ADDON}..."
-            curl -fsSL "$NATIVE_URL" -o "${INSTALL_DIR}/${NATIVE_ADDON}" || {
-                echo "Failed to download ${NATIVE_ADDON}"
-                exit 1
-            }
-            downloaded_native=$((downloaded_native + 1))
+            if curl -fsSL "$NATIVE_URL" -o "${INSTALL_DIR}/${NATIVE_ADDON}"; then
+                downloaded_native=$((downloaded_native + 1))
+            else
+                rm -f "${INSTALL_DIR}/${NATIVE_ADDON}"
+                echo "  ${NATIVE_ADDON} not available (optional)"
+            fi
         done
+        if [ "$downloaded_native" -eq 0 ]; then
+            echo "Failed to download any native addon variant for ${PLATFORM}-${ARCH}"
+            exit 1
+        fi
     else
         NATIVE_ADDON="pi_natives.${PLATFORM}-${ARCH}.node"
         NATIVE_URL="https://github.com/${REPO}/releases/download/${LATEST}/${NATIVE_ADDON}"
