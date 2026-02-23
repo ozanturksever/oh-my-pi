@@ -719,6 +719,35 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.showStatus(`Followup suggestions ${next ? "enabled" : "disabled"}`);
 	}
 
+	async showFollowupSelector(): Promise<void> {
+		const suggestions = this.followupSuggestions;
+		if (suggestions.length === 0) return;
+
+		const labels = suggestions.map(s => s.label || s.prompt.slice(0, 80));
+		const choice = await this.showHookSelector("Suggested next steps", labels);
+
+		if (choice === undefined) return;
+
+		const idx = labels.indexOf(choice);
+		const selected = suggestions[idx];
+		if (!selected) return;
+
+		// Remove the selected item, keep the rest for future picks
+		this.followupSuggestions = suggestions.filter((_, i) => i !== idx);
+
+		// Add to editor history so the user can recall it
+		this.editor.addToHistory(selected.prompt);
+
+		// Queue the selected followup as a message
+		if (this.session.isStreaming) {
+			await this.session.prompt(selected.prompt, { streamingBehavior: "followUp" });
+		} else {
+			void this.session.prompt(selected.prompt);
+		}
+		this.updatePendingMessagesDisplay();
+		this.ui.requestRender();
+	}
+
 	async handleExitPlanModeTool(details: ExitPlanModeDetails): Promise<void> {
 		if (!this.planModeEnabled) {
 			this.showWarning("Plan mode is not active.");

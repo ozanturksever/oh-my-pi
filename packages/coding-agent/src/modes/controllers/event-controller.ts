@@ -338,7 +338,7 @@ export class EventController {
 				this.ctx.ui.requestRender();
 				this.sendCompletionNotification();
 				if (this.ctx.followupSuggestions.length > 0) {
-					void this.#showFollowupSelector();
+					void this.ctx.showFollowupSelector();
 				}
 				break;
 
@@ -446,23 +446,6 @@ export class EventController {
 				break;
 			}
 		}
-	}
-
-	async #showFollowupSelector(): Promise<void> {
-		const suggestions = this.ctx.followupSuggestions;
-		if (suggestions.length === 0) return;
-
-		const labels = suggestions.map(s => s.label || s.prompt.slice(0, 80));
-		const choice = await this.ctx.showHookSelector("Suggested next steps", labels);
-
-		this.ctx.followupSuggestions = [];
-
-		if (choice === undefined) return;
-
-		const selected = suggestions[labels.indexOf(choice)];
-		if (!selected) return;
-
-		this.ctx.editor.setText(selected.prompt);
 	}
 
 	sendCompletionNotification(): void {

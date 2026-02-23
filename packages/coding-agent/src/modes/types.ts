@@ -164,6 +164,7 @@ export interface InteractiveModeContext {
 	handleMoveCommand(targetPath: string): Promise<void>;
 	handleMemoryCommand(text: string): Promise<void>;
 	handleFollowupCommand(): Promise<void>;
+	showFollowupSelector(): Promise<void>;
 	handleSTTToggle(): Promise<void>;
 	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void>;
 	openInBrowser(urlOrPath: string): void;

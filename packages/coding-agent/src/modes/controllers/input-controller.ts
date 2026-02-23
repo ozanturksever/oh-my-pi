@@ -364,7 +364,12 @@ export class InputController {
 	/** Send editor text as a follow-up message (queued behind current stream). */
 	async handleFollowUp(): Promise<void> {
 		const text = this.ctx.editor.getText().trim();
-		if (!text) return;
+		if (!text) {
+			if (this.ctx.followupSuggestions.length > 0) {
+				await this.ctx.showFollowupSelector();
+			}
+			return;
+		}
 
 		if (this.ctx.session.isCompacting) {
 			this.ctx.queueCompactionMessage(text, "followUp");
