@@ -808,7 +808,6 @@ describe("/followloop status subcommand", () => {
 	});
 });
 
-
 describe("event-controller agent_end branching", () => {
 	function createEventControllerMocks(opts: {
 		followLoopActive: boolean;
@@ -843,9 +842,7 @@ describe("event-controller agent_end branching", () => {
 			followLoopActive: true,
 			followupSuggestions: [{ prompt: "fix it", priority: "must-have" }],
 		});
-		const { EventController } = await import(
-			"@oh-my-pi/pi-coding-agent/modes/controllers/event-controller"
-		);
+		const { EventController } = await import("@oh-my-pi/pi-coding-agent/modes/controllers/event-controller");
 		const controller = new EventController(ctx);
 		await controller.handleEvent({ type: "agent_end" } as any);
 
@@ -861,9 +858,7 @@ describe("event-controller agent_end branching", () => {
 			followLoopActive: false,
 			followupSuggestions: [{ prompt: "add docs", priority: "nice-to-have" }],
 		});
-		const { EventController } = await import(
-			"@oh-my-pi/pi-coding-agent/modes/controllers/event-controller"
-		);
+		const { EventController } = await import("@oh-my-pi/pi-coding-agent/modes/controllers/event-controller");
 		const controller = new EventController(ctx);
 		await controller.handleEvent({ type: "agent_end" } as any);
 
@@ -879,9 +874,7 @@ describe("event-controller agent_end branching", () => {
 				followLoopActive: loopActive,
 				followupSuggestions: [],
 			});
-			const { EventController } = await import(
-				"@oh-my-pi/pi-coding-agent/modes/controllers/event-controller"
-			);
+			const { EventController } = await import("@oh-my-pi/pi-coding-agent/modes/controllers/event-controller");
 			const controller = new EventController(ctx);
 			await controller.handleEvent({ type: "agent_end" } as any);
 
