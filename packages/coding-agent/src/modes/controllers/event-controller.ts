@@ -462,9 +462,7 @@ export class EventController {
 		const selected = suggestions[labels.indexOf(choice)];
 		if (!selected) return;
 
-		if (this.ctx.onInputCallback) {
-			this.ctx.onInputCallback({ text: selected.prompt });
-		}
+		this.ctx.editor.setText(selected.prompt);
 	}
 
 	sendCompletionNotification(): void {
