@@ -258,7 +258,7 @@ install_binary() {
     chmod +x "${INSTALL_DIR}/oomp"
     # macOS: re-sign binary (bun compile signatures may not survive download)
     if [ "$PLATFORM" = "darwin" ] && command -v codesign >/dev/null 2>&1; then
-        codesign --force --sign - "${INSTALL_DIR}/oomp" 2>/dev/null || true
+        codesign --force --sign - "${INSTALL_DIR}/oomp" || true
     fi
     downloaded_native=0
     if [ "$ARCH" = "x64" ]; then
