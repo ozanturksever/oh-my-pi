@@ -134,6 +134,24 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			);
 		}
 
+		multiSelect(
+			title: string,
+			options: string[],
+			dialogOptions?: ExtensionUIDialogOptions,
+		): Promise<string[] | undefined> {
+			return this.#createDialogPromise(
+				dialogOptions,
+				undefined,
+				{ method: "multiSelect", title, options, timeout: dialogOptions?.timeout },
+				response =>
+					"cancelled" in response && response.cancelled
+						? undefined
+						: "values" in response
+							? (response.values as string[])
+							: undefined,
+			);
+		}
+
 		confirm(title: string, message: string, dialogOptions?: ExtensionUIDialogOptions): Promise<boolean> {
 			return this.#createDialogPromise(
 				dialogOptions,

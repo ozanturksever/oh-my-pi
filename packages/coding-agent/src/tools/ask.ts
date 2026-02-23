@@ -20,7 +20,7 @@ import { TERMINAL, Text } from "@oh-my-pi/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
-import { type Theme, theme } from "../modes/theme/theme";
+import type { Theme } from "../modes/theme/theme";
 import askDescription from "../prompts/tools/ask.md" with { type: "text" };
 import { renderStatusLine } from "../tui";
 import type { ToolSession } from ".";
@@ -76,10 +76,6 @@ export interface AskToolDetails {
 const OTHER_OPTION = "Other (type your own)";
 const RECOMMENDED_SUFFIX = " (Recommended)";
 
-function getDoneOptionLabel(): string {
-	return `${theme.status.success} Done selecting`;
-}
-
 /** Add "(Recommended)" suffix to the option at the given index if not already present */
 function addRecommendedSuffix(labels: string[], recommendedIndex?: number): string[] {
 	if (recommendedIndex === undefined || recommendedIndex < 0 || recommendedIndex >= labels.length) {
@@ -113,6 +109,11 @@ interface UIContext {
 		options: string[],
 		options_?: { initialIndex?: number; timeout?: number; outline?: boolean },
 	): Promise<string | undefined>;
+	multiSelect(
+		prompt: string,
+		options: string[],
+		options_?: { initialIndex?: number; timeout?: number; outline?: boolean },
+	): Promise<string[] | undefined>;
 	input(prompt: string): Promise<string | undefined>;
 }
 
@@ -130,75 +131,23 @@ async function askSingleQuestion(
 	options?: AskQuestionOptions,
 ): Promise<SelectionResult> {
 	const timeout = options?.timeout ?? undefined;
-	const doneLabel = getDoneOptionLabel();
 	let selectedOptions: string[] = [];
 	let customInput: string | undefined;
 
 	if (multi) {
-		const selected = new Set<string>();
-		let cursorIndex = Math.min(Math.max(recommended ?? 0, 0), optionLabels.length - 1);
+		const choices = await ui.multiSelect(question, [...optionLabels, OTHER_OPTION], {
+			timeout: timeout ?? undefined,
+			outline: true,
+		});
 
-		while (true) {
-			const opts: string[] = [];
-
-			for (const opt of optionLabels) {
-				const checkbox = selected.has(opt) ? theme.checkbox.checked : theme.checkbox.unchecked;
-				opts.push(`${checkbox} ${opt}`);
-			}
-
-			// Done after options, before Other - so cursor stays on options after toggle
-			if (selected.size > 0) {
-				opts.push(doneLabel);
-			}
-			opts.push(OTHER_OPTION);
-
-			const prefix = selected.size > 0 ? `(${selected.size} selected) ` : "";
-			const selectionStart = Date.now();
-			const choice = await ui.select(`${prefix}${question}`, opts, {
-				initialIndex: cursorIndex,
-				timeout: timeout ?? undefined,
-				outline: true,
-			});
-			const elapsed = Date.now() - selectionStart;
-			const timedOut = timeout != null && elapsed >= timeout;
-
-			if (choice === undefined || choice === doneLabel) break;
-
-			if (choice === OTHER_OPTION) {
-				if (!timedOut) {
-					const input = await ui.input("Enter your response:");
-					if (input) customInput = input;
-				}
-				break;
-			}
-
-			// Find which index was selected and update cursor position
-			const selectedIdx = opts.indexOf(choice);
-			if (selectedIdx >= 0) {
-				cursorIndex = selectedIdx;
-			}
-
-			const checkedPrefix = `${theme.checkbox.checked} `;
-			const uncheckedPrefix = `${theme.checkbox.unchecked} `;
-			let opt: string | undefined;
-			if (choice.startsWith(checkedPrefix)) {
-				opt = choice.slice(checkedPrefix.length);
-			} else if (choice.startsWith(uncheckedPrefix)) {
-				opt = choice.slice(uncheckedPrefix.length);
-			}
-			if (opt) {
-				if (selected.has(opt)) {
-					selected.delete(opt);
-				} else {
-					selected.add(opt);
-				}
-			}
-
-			if (timedOut) {
-				break;
+		if (choices && choices.length > 0) {
+			const hasOther = choices.includes(OTHER_OPTION);
+			selectedOptions = choices.filter(c => c !== OTHER_OPTION);
+			if (hasOther) {
+				const input = await ui.input("Enter your response:");
+				if (input) customInput = input;
 			}
 		}
-		selectedOptions = Array.from(selected);
 	} else {
 		const displayLabels = addRecommendedSuffix(optionLabels, recommended);
 		const choice = await ui.select(question, [...displayLabels, OTHER_OPTION], {

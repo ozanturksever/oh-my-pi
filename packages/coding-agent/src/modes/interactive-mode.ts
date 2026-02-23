@@ -731,25 +731,29 @@ export class InteractiveMode implements InteractiveModeContext {
 		if (suggestions.length === 0) return;
 
 		const labels = suggestions.map(s => s.label || s.prompt);
-		const choice = await this.showHookSelector("Suggested next steps", labels);
+		const choices = await this.showHookMultiSelector("Suggested next steps", labels);
 
-		if (choice === undefined) return;
+		if (!choices || choices.length === 0) return;
 
-		const idx = labels.indexOf(choice);
-		const selected = suggestions[idx];
-		if (!selected) return;
+		// Map labels back to indices
+		const selectedIndices = choices.map(c => labels.indexOf(c)).filter(i => i >= 0);
+		const selected = selectedIndices.map(i => suggestions[i]).filter(Boolean);
 
-		// Remove the selected item, keep the rest for future picks
-		this.followupSuggestions = suggestions.filter((_, i) => i !== idx);
+		// Remove selected, keep rest
+		const selectedSet = new Set(selectedIndices);
+		this.followupSuggestions = suggestions.filter((_, i) => !selectedSet.has(i));
 
-		// Add to editor history so the user can recall it
-		this.editor.addToHistory(selected.prompt);
+		// Add each to editor history
+		for (const s of selected) {
+			this.editor.addToHistory(s.prompt);
+		}
 
-		// Queue the selected followup as a message
+		// Join and send as one prompt
+		const combined = selected.map(s => s.prompt).join("\n\n");
 		if (this.session.isStreaming) {
-			await this.session.prompt(selected.prompt, { streamingBehavior: "followUp" });
+			await this.session.prompt(combined, { streamingBehavior: "followUp" });
 		} else {
-			void this.session.prompt(selected.prompt);
+			void this.session.prompt(combined);
 		}
 		this.updatePendingMessagesDisplay();
 		this.ui.requestRender();
@@ -1388,6 +1392,14 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	hideHookSelector(): void {
 		this.#extensionUiController.hideHookSelector();
+	}
+
+	showHookMultiSelector(
+		title: string,
+		options: string[],
+		dialogOptions?: ExtensionUIDialogOptions,
+	): Promise<string[] | undefined> {
+		return this.#extensionUiController.showHookMultiSelector(title, options, dialogOptions);
 	}
 
 	showHookInput(title: string, placeholder?: string): Promise<string | undefined> {

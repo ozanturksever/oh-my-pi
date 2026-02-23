@@ -13,6 +13,7 @@ export interface HookSelectorOptions {
 	initialIndex?: number;
 	outline?: boolean;
 	maxVisible?: number;
+	multi?: boolean;
 }
 
 class OutlinedList extends Container {
@@ -42,10 +43,14 @@ export class HookSelectorComponent extends Container {
 	#listContainer: Container | undefined;
 	#outlinedList: OutlinedList | undefined;
 	#onSelectCallback: (option: string) => void;
+	#onMultiSelectCallback: ((options: string[]) => void) | undefined;
 	#onCancelCallback: () => void;
 	#titleText: Text;
 	#baseTitle: string;
 	#countdown: CountdownTimer | undefined;
+	#multi: boolean;
+	#checked = new Set<number>();
+	#helpText: Text;
 
 	constructor(
 		title: string,
@@ -62,6 +67,7 @@ export class HookSelectorComponent extends Container {
 		this.#onSelectCallback = onSelect;
 		this.#onCancelCallback = onCancel;
 		this.#baseTitle = title;
+		this.#multi = opts?.multi ?? false;
 
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
@@ -95,11 +101,19 @@ export class HookSelectorComponent extends Container {
 			this.addChild(this.#listContainer);
 		}
 		this.addChild(new Spacer(1));
-		this.addChild(new Text(theme.fg("dim", "up/down navigate  enter select  esc cancel"), 1, 0));
+		const helpMsg = this.#multi
+			? "up/down navigate  space toggle  a all  enter confirm  esc cancel"
+			: "up/down navigate  enter select  esc cancel";
+		this.#helpText = new Text(theme.fg("dim", helpMsg), 1, 0);
+		this.addChild(this.#helpText);
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());
 
 		this.#updateList();
+	}
+
+	setOnMultiSelect(cb: (options: string[]) => void): void {
+		this.#onMultiSelectCallback = cb;
 	}
 
 	#updateList(): void {
@@ -111,10 +125,20 @@ export class HookSelectorComponent extends Container {
 		const endIndex = Math.min(startIndex + this.#maxVisible, this.#options.length);
 
 		for (let i = startIndex; i < endIndex; i++) {
-			const isSelected = i === this.#selectedIndex;
-			const text = isSelected
-				? theme.fg("accent", `${theme.nav.cursor} `) + theme.fg("accent", this.#options[i])
-				: `  ${theme.fg("text", this.#options[i])}`;
+			const isAtCursor = i === this.#selectedIndex;
+			let text: string;
+			if (this.#multi) {
+				const isChecked = this.#checked.has(i);
+				const checkbox = isChecked ? theme.checkbox.checked : theme.checkbox.unchecked;
+				const checkboxStr = isChecked ? theme.fg("success", checkbox) : theme.fg("dim", checkbox);
+				text = isAtCursor
+					? theme.fg("accent", `${theme.nav.cursor} `) + checkboxStr + theme.fg("accent", ` ${this.#options[i]}`)
+					: `  ${checkboxStr} ${theme.fg("text", this.#options[i])}`;
+			} else {
+				text = isAtCursor
+					? theme.fg("accent", `${theme.nav.cursor} `) + theme.fg("accent", this.#options[i])
+					: `  ${theme.fg("text", this.#options[i])}`;
+			}
 			lines.push(text);
 		}
 
@@ -129,6 +153,15 @@ export class HookSelectorComponent extends Container {
 		for (const line of lines) {
 			this.#listContainer?.addChild(new Text(line, 1, 0));
 		}
+
+		if (this.#multi) {
+			const count = this.#checked.size;
+			const helpMsg =
+				count > 0
+					? `(${count} selected) enter confirm  space toggle  a all  esc cancel`
+					: "up/down navigate  space toggle  a all  enter confirm  esc cancel";
+			this.#helpText.setText(theme.fg("dim", helpMsg));
+		}
 	}
 
 	handleInput(keyData: string): void {
@@ -142,8 +175,39 @@ export class HookSelectorComponent extends Container {
 			this.#selectedIndex = Math.min(this.#options.length - 1, this.#selectedIndex + 1);
 			this.#updateList();
 		} else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
-			const selected = this.#options[this.#selectedIndex];
-			if (selected) this.#onSelectCallback(selected);
+			if (this.#multi) {
+				const indices = this.#checked.size > 0 ? Array.from(this.#checked) : [this.#selectedIndex];
+				const selected = indices
+					.sort((a, b) => a - b)
+					.map(i => this.#options[i])
+					.filter(Boolean);
+				if (selected.length > 0) {
+					if (this.#onMultiSelectCallback) {
+						this.#onMultiSelectCallback(selected);
+					} else {
+						this.#onSelectCallback(selected[0]);
+					}
+				}
+			} else {
+				const selected = this.#options[this.#selectedIndex];
+				if (selected) this.#onSelectCallback(selected);
+			}
+		} else if (this.#multi && keyData === " ") {
+			if (this.#checked.has(this.#selectedIndex)) {
+				this.#checked.delete(this.#selectedIndex);
+			} else {
+				this.#checked.add(this.#selectedIndex);
+			}
+			this.#updateList();
+		} else if (this.#multi && keyData === "a") {
+			if (this.#checked.size === this.#options.length) {
+				this.#checked.clear();
+			} else {
+				for (let i = 0; i < this.#options.length; i++) {
+					this.#checked.add(i);
+				}
+			}
+			this.#updateList();
 		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesKey(keyData, "ctrl+c")) {
 			this.#onCancelCallback();
 		}

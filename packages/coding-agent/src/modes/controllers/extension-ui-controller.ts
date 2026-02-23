@@ -40,6 +40,7 @@ export class ExtensionUiController {
 		// Create and set hook & tool UI context
 		const uiContext: ExtensionUIContext = {
 			select: (title, options, dialogOptions) => this.showHookSelector(title, options, dialogOptions),
+			multiSelect: (title, options, dialogOptions) => this.showHookMultiSelector(title, options, dialogOptions),
 			confirm: (title, message, _dialogOptions) => this.showHookConfirm(title, message),
 			input: (title, placeholder, _dialogOptions) => this.showHookInput(title, placeholder),
 			notify: (message, type) => this.showHookNotify(message, type),
@@ -452,6 +453,7 @@ export class ExtensionUiController {
 	createBackgroundUiContext(): ExtensionUIContext {
 		return {
 			select: async (_title: string, _options: string[], _dialogOptions) => undefined,
+			multiSelect: async (_title: string, _options: string[], _dialogOptions) => undefined,
 			confirm: async (_title: string, _message: string, _dialogOptions) => false,
 			input: async (_title: string, _placeholder?: string, _dialogOptions?: unknown) => undefined,
 			notify: () => {},
@@ -597,6 +599,43 @@ export class ExtensionUiController {
 		this.ctx.hookSelector = undefined;
 		this.ctx.ui.setFocus(this.ctx.editor);
 		this.ctx.ui.requestRender();
+	}
+
+	/**
+	 * Show a multi-select selector for hooks.
+	 */
+	showHookMultiSelector(
+		title: string,
+		options: string[],
+		dialogOptions?: ExtensionUIDialogOptions,
+	): Promise<string[] | undefined> {
+		const { promise, resolve } = Promise.withResolvers<string[] | undefined>();
+		this.#hookSelectorOverlay?.hide();
+		this.#hookSelectorOverlay = undefined;
+		const maxVisible = Math.max(4, Math.min(15, this.ctx.ui.terminal.rows - 12));
+		this.ctx.hookSelector = new HookSelectorComponent(
+			title,
+			options,
+			() => {},
+			() => {
+				this.hideHookSelector();
+				resolve(undefined);
+			},
+			{
+				initialIndex: dialogOptions?.initialIndex,
+				timeout: dialogOptions?.timeout,
+				tui: this.ctx.ui,
+				outline: dialogOptions?.outline,
+				maxVisible,
+				multi: true,
+			},
+		);
+		this.ctx.hookSelector.setOnMultiSelect(selected => {
+			this.hideHookSelector();
+			resolve(selected);
+		});
+		this.#hookSelectorOverlay = this.ctx.ui.showOverlay(this.ctx.hookSelector, this.#dialogOverlayOptions);
+		return promise;
 	}
 
 	/**

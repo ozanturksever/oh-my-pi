@@ -885,3 +885,190 @@ describe("event-controller agent_end branching", () => {
 		}
 	});
 });
+
+describe("showFollowupSelector multi-select", () => {
+	function createFollowupSelectorMock() {
+		const promptCalls: Array<{ text: string; opts?: unknown }> = [];
+		const historyCalls: string[] = [];
+		let followupSuggestions: Array<{
+			prompt: string;
+			label?: string;
+			priority?: "must-have" | "nice-to-have" | "optional";
+		}> = [];
+		let multiSelectorResult: string[] | undefined;
+
+		const ctx = {
+			get followupSuggestions() {
+				return followupSuggestions;
+			},
+			set followupSuggestions(v: typeof followupSuggestions) {
+				followupSuggestions = v;
+			},
+			session: {
+				isStreaming: false,
+				prompt: vi.fn(async (text: string, opts?: unknown) => {
+					promptCalls.push({ text, opts });
+				}),
+			},
+			editor: {
+				addToHistory: vi.fn((text: string) => {
+					historyCalls.push(text);
+				}),
+			},
+			ui: { requestRender: vi.fn() },
+			updatePendingMessagesDisplay: vi.fn(),
+			showHookMultiSelector: vi.fn(async () => multiSelectorResult),
+			showFollowupSelector: null as unknown as () => Promise<void>,
+		};
+
+		ctx.showFollowupSelector = InteractiveMode.prototype.showFollowupSelector.bind(ctx as any);
+
+		return {
+			ctx,
+			promptCalls,
+			historyCalls,
+			setSuggestions(v: typeof followupSuggestions) {
+				followupSuggestions = v;
+			},
+			setMultiSelectorResult(v: string[] | undefined) {
+				multiSelectorResult = v;
+				ctx.showHookMultiSelector = vi.fn(async () => v);
+			},
+		};
+	}
+
+	test("does nothing when no suggestions", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.ctx.showHookMultiSelector).not.toHaveBeenCalled();
+		expect(mock.promptCalls).toHaveLength(0);
+	});
+
+	test("returns without action when user cancels", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([{ prompt: "do stuff", label: "Do stuff" }]);
+		mock.setMultiSelectorResult(undefined);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.promptCalls).toHaveLength(0);
+		expect(mock.historyCalls).toHaveLength(0);
+	});
+
+	test("returns without action when user selects empty list", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([{ prompt: "do stuff" }]);
+		mock.setMultiSelectorResult([]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.promptCalls).toHaveLength(0);
+	});
+
+	test("single selection sends one prompt", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([
+			{ prompt: "fix imports", label: "Fix imports" },
+			{ prompt: "add tests", label: "Add tests" },
+		]);
+		mock.setMultiSelectorResult(["Fix imports"]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.promptCalls).toHaveLength(1);
+		expect(mock.promptCalls[0].text).toBe("fix imports");
+		expect(mock.historyCalls).toEqual(["fix imports"]);
+	});
+
+	test("multiple selections are joined with double newline", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([
+			{ prompt: "fix imports", label: "Fix imports" },
+			{ prompt: "add error handling", label: "Add error handling" },
+			{ prompt: "run tests", label: "Run tests" },
+		]);
+		mock.setMultiSelectorResult(["Fix imports", "Run tests"]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.promptCalls).toHaveLength(1);
+		expect(mock.promptCalls[0].text).toBe("fix imports\n\nrun tests");
+	});
+
+	test("multiple selections: all three joined correctly", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([
+			{ prompt: "first task", label: "First" },
+			{ prompt: "second task", label: "Second" },
+			{ prompt: "third task", label: "Third" },
+		]);
+		mock.setMultiSelectorResult(["First", "Second", "Third"]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.promptCalls[0].text).toBe("first task\n\nsecond task\n\nthird task");
+		expect(mock.historyCalls).toEqual(["first task", "second task", "third task"]);
+	});
+
+	test("selected items are removed from suggestions", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([
+			{ prompt: "A", label: "A" },
+			{ prompt: "B", label: "B" },
+			{ prompt: "C", label: "C" },
+		]);
+		mock.setMultiSelectorResult(["A", "C"]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.ctx.followupSuggestions).toHaveLength(1);
+		expect(mock.ctx.followupSuggestions[0].prompt).toBe("B");
+	});
+
+	test("each selected prompt is added to editor history", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([
+			{ prompt: "prompt one", label: "One" },
+			{ prompt: "prompt two", label: "Two" },
+		]);
+		mock.setMultiSelectorResult(["One", "Two"]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.historyCalls).toEqual(["prompt one", "prompt two"]);
+	});
+
+	test("uses prompt as label when no label provided", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([{ prompt: "fix the bug" }, { prompt: "write tests" }]);
+		mock.setMultiSelectorResult(["fix the bug", "write tests"]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.promptCalls[0].text).toBe("fix the bug\n\nwrite tests");
+	});
+
+	test("uses followUp streaming behavior when session is streaming", async () => {
+		const mock = createFollowupSelectorMock();
+		(mock.ctx.session as any).isStreaming = true;
+		mock.setSuggestions([{ prompt: "task A", label: "A" }]);
+		mock.setMultiSelectorResult(["A"]);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.ctx.session.prompt).toHaveBeenCalledWith("task A", { streamingBehavior: "followUp" });
+	});
+
+	test("calls showHookMultiSelector with correct title and labels", async () => {
+		const mock = createFollowupSelectorMock();
+		mock.setSuggestions([{ prompt: "fix imports", label: "Fix imports" }, { prompt: "add tests" }]);
+		mock.setMultiSelectorResult(undefined);
+
+		await mock.ctx.showFollowupSelector();
+
+		expect(mock.ctx.showHookMultiSelector).toHaveBeenCalledWith("Suggested next steps", ["Fix imports", "add tests"]);
+	});
+});

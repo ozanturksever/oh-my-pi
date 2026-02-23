@@ -224,6 +224,11 @@ export interface InteractiveModeContext {
 		dialogOptions?: ExtensionUIDialogOptions,
 	): Promise<string | undefined>;
 	hideHookSelector(): void;
+	showHookMultiSelector(
+		title: string,
+		options: string[],
+		dialogOptions?: ExtensionUIDialogOptions,
+	): Promise<string[] | undefined>;
 	showHookInput(title: string, placeholder?: string): Promise<string | undefined>;
 	hideHookInput(): void;
 	showHookEditor(title: string, prefill?: string): Promise<string | undefined>;

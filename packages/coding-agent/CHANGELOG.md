@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added multi-select mode to `HookSelectorComponent` with space to toggle, `a` to select all, and enter to confirm
+- Added `showHookMultiSelector` to `InteractiveModeContext` and `ExtensionUiController`
+- Added `multiSelect` method to `ExtensionUIContext` for extensions to present multi-select prompts
+
+### Changed
+
+- Followup selector now supports multi-select: pick multiple suggestions at once, joined with double newline
+- Refactored `ask` tool multi-select to use native `ui.multiSelect` instead of a looping single-select pattern
+
 ## [13.3.0] - 2026-02-23
 
 ### Added

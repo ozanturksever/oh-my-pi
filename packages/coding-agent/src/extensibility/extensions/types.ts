@@ -87,6 +87,13 @@ export interface ExtensionUIContext {
 	/** Show a selector and return the user's choice. */
 	select(title: string, options: string[], dialogOptions?: ExtensionUIDialogOptions): Promise<string | undefined>;
 
+	/** Show a multi-select selector and return the user's choices. */
+	multiSelect(
+		title: string,
+		options: string[],
+		dialogOptions?: ExtensionUIDialogOptions,
+	): Promise<string[] | undefined>;
+
 	/** Show a confirmation dialog. */
 	confirm(title: string, message: string, dialogOptions?: ExtensionUIDialogOptions): Promise<boolean>;
 

@@ -127,6 +127,7 @@ export async function emitSessionShutdownEvent(extensionRunner: ExtensionRunner 
 
 const noOpUIContext: ExtensionUIContext = {
 	select: async (_title, _options, _dialogOptions) => undefined,
+	multiSelect: async (_title, _options, _dialogOptions) => undefined,
 	confirm: async (_title, _message, _dialogOptions) => false,
 	input: async (_title, _placeholder, _dialogOptions) => undefined,
 	notify: () => {},
