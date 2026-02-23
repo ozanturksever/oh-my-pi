@@ -63,7 +63,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pi-natives-${{ matrix.platform }}-${{ matrix.arch }}
-          path: packages/natives/native/pi_natives.${{ matrix.platform }}-${{ matrix.arch }}.node
+          path: packages/natives/native/pi_natives.${{ matrix.platform }}-${{ matrix.arch }}*.node
           if-no-files-found: error
 
   build-and-release:
@@ -93,10 +93,11 @@ jobs:
       - name: Verify native addons
         run: |
           for plat in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
-            if [ -f "packages/natives/native/pi_natives.${plat}.node" ]; then
-              echo "OK pi_natives.${plat}.node"
+            count=$(ls packages/natives/native/pi_natives.${plat}*.node 2>/dev/null | wc -l)
+            if [ "$count" -gt 0 ]; then
+              echo "OK pi_natives.${plat} ($count file(s))"
             else
-              echo "MISSING pi_natives.${plat}.node"
+              echo "MISSING pi_natives.${plat}*.node"
               exit 1
             fi
           done
