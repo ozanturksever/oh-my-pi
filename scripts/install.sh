@@ -256,6 +256,10 @@ install_binary() {
     echo "Downloading ${BINARY}..."
     curl -fsSL "$BINARY_URL" -o "${INSTALL_DIR}/oomp"
     chmod +x "${INSTALL_DIR}/oomp"
+    # macOS: re-sign binary (bun compile signatures may not survive download)
+    if [ "$PLATFORM" = "darwin" ] && command -v codesign >/dev/null 2>&1; then
+        codesign --force --sign - "${INSTALL_DIR}/oomp" 2>/dev/null || true
+    fi
     downloaded_native=0
     if [ "$ARCH" = "x64" ]; then
         for variant in modern baseline; do
