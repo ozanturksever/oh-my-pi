@@ -730,7 +730,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		const suggestions = this.followupSuggestions;
 		if (suggestions.length === 0) return;
 
-		const labels = suggestions.map(s => s.label || s.prompt.slice(0, 80));
+		const labels = suggestions.map(s => s.label || s.prompt);
 		const choice = await this.showHookSelector("Suggested next steps", labels);
 
 		if (choice === undefined) return;
