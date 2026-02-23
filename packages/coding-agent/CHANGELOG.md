@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Followup selector now queues selected prompt as a message instead of pre-filling editor
+- Selected followup prompts are added to editor history for recall with up-arrow
+- Remaining followup suggestions persist after selection; re-open with ctrl+enter
+
 ## [13.2.0] - 2026-02-23
 
 ### Added
