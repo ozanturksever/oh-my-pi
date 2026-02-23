@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.2.0] - 2026-02-23
+
 ### Added
 
 - Added followup suggestions feature: after each agent turn, show ~3 contextual followup suggestions the user can select as their next prompt
