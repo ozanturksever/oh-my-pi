@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.4.0] - 2026-02-23
+
 ### Added
 
 - Added multi-select mode to `HookSelectorComponent` with space to toggle, `a` to select all, and enter to confirm
