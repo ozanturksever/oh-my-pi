@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.2.1] - 2026-02-23
+
 ### Changed
 
 - Followup selector now queues selected prompt as a message instead of pre-filling editor
