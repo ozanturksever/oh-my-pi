@@ -37,6 +37,7 @@ import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
 import { CustomEditor } from "./components/custom-editor";
 import { DynamicBorder } from "./components/dynamic-border";
+import { FollowupSuggestionsComponent } from "./components/followup-suggestions";
 import type { HookEditorComponent } from "./components/hook-editor";
 import type { HookInputComponent } from "./components/hook-input";
 import type { HookSelectorComponent } from "./components/hook-selector";
@@ -107,6 +108,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		label?: string;
 		priority?: "must-have" | "nice-to-have" | "optional";
 	}> = [];
+	followupSuggestionsComponent: FollowupSuggestionsComponent | undefined = undefined;
 	followLoopActive = false;
 	followLoopFinishPrompt: string | undefined = undefined;
 	followLoopIterations = 0;
@@ -725,37 +727,47 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.showStatus(`Followup suggestions ${next ? "enabled" : "disabled"}`);
 	}
 
-	async showFollowupSelector(): Promise<void> {
+	showFollowupSuggestions(): void {
+		this.clearFollowupSuggestions();
 		const suggestions = this.followupSuggestions;
 		if (suggestions.length === 0) return;
 
-		const labels = suggestions.map(s => s.label || s.prompt);
-		const choices = await this.showHookMultiSelector("Suggested next steps", labels);
+		const component = new FollowupSuggestionsComponent(suggestions, (indices: number[]) => {
+			const selected = indices.map(i => suggestions[i]).filter(Boolean);
+			if (selected.length === 0) return;
 
-		if (!choices || choices.length === 0) return;
+			// Remove selected, keep rest
+			const selectedSet = new Set(indices);
+			this.followupSuggestions = suggestions.filter((_, i) => !selectedSet.has(i));
+			this.clearFollowupSuggestions();
 
-		// Map labels back to indices
-		const selectedIndices = choices.map(c => labels.indexOf(c)).filter(i => i >= 0);
-		const selected = selectedIndices.map(i => suggestions[i]).filter(Boolean);
+			// Add each to editor history
+			for (const s of selected) {
+				this.editor.addToHistory(s.prompt);
+			}
 
-		// Remove selected, keep rest
-		const selectedSet = new Set(selectedIndices);
-		this.followupSuggestions = suggestions.filter((_, i) => !selectedSet.has(i));
+			// Join and send as one prompt
+			const combined = selected.map(s => s.prompt).join("\n\n");
+			if (this.session.isStreaming) {
+				void this.session.prompt(combined, { streamingBehavior: "followUp" });
+			} else {
+				void this.session.prompt(combined);
+			}
+			this.updatePendingMessagesDisplay();
+			this.ui.requestRender();
+		});
 
-		// Add each to editor history
-		for (const s of selected) {
-			this.editor.addToHistory(s.prompt);
-		}
-
-		// Join and send as one prompt
-		const combined = selected.map(s => s.prompt).join("\n\n");
-		if (this.session.isStreaming) {
-			await this.session.prompt(combined, { streamingBehavior: "followUp" });
-		} else {
-			void this.session.prompt(combined);
-		}
-		this.updatePendingMessagesDisplay();
+		this.followupSuggestionsComponent = component;
+		this.chatContainer.addChild(component);
 		this.ui.requestRender();
+	}
+
+	clearFollowupSuggestions(): void {
+		if (this.followupSuggestionsComponent) {
+			this.chatContainer.removeChild(this.followupSuggestionsComponent);
+			this.followupSuggestionsComponent = undefined;
+			this.ui.requestRender();
+		}
 	}
 
 	async startFollowLoop(finishPrompt?: string): Promise<void> {
@@ -816,7 +828,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.stopFollowLoop();
 			// Show remaining suggestions for manual pick
 			if (suggestions.length > 0) {
-				void this.showFollowupSelector();
+				this.showFollowupSuggestions();
 			}
 			return;
 		}
@@ -827,7 +839,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.showStatus(`Follow loop: reached max iterations (${maxIterations})`);
 			this.stopFollowLoop();
 			if (suggestions.length > 0) {
-				void this.showFollowupSelector();
+				this.showFollowupSuggestions();
 			}
 			return;
 		}

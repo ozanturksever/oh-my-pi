@@ -26,6 +26,12 @@ export class CustomEditor extends Editor {
 	onCtrlV?: () => Promise<boolean>;
 	/** Called when Alt+Up is pressed (dequeue keybinding). */
 	onAltUp?: () => void;
+	/** Called when a digit key (1-9) is pressed while editor is empty. Receives the digit (1-based). */
+	onDigitKey?: (digit: number) => void;
+	/** Called when up/down arrow is pressed while editor is empty. Returns true if consumed. */
+	onArrowKeyEmpty?: (direction: "up" | "down") => boolean;
+	/** Called when space is pressed while editor is empty. Returns true if consumed. */
+	onSpaceKeyEmpty?: () => boolean;
 
 	/** Custom key handlers from extensions */
 	#customKeyHandlers = new Map<KeyId, () => void>();
@@ -165,6 +171,23 @@ export class CustomEditor extends Editor {
 		if (data === "?" && this.getText().length === 0 && this.onQuestionMark) {
 			this.onQuestionMark();
 			return;
+		}
+
+		// Intercept digit keys (1-9) when editor is empty for inline followup selection
+		if (data >= "1" && data <= "9" && this.getText().length === 0 && this.onDigitKey) {
+			this.onDigitKey(Number.parseInt(data, 10));
+			return;
+		}
+
+		// Intercept up/down arrow keys when editor is empty for inline followup navigation
+		if (this.getText().length === 0 && this.onArrowKeyEmpty) {
+			if (matchesKey(data, "up") && this.onArrowKeyEmpty("up")) return;
+			if (matchesKey(data, "down") && this.onArrowKeyEmpty("down")) return;
+		}
+
+		// Intercept space when editor is empty for inline followup toggle
+		if (data === " " && this.getText().length === 0 && this.onSpaceKeyEmpty) {
+			if (this.onSpaceKeyEmpty()) return;
 		}
 
 		// Check custom key handlers (extensions)

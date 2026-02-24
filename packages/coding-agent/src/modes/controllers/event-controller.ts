@@ -59,6 +59,7 @@ export class EventController {
 		switch (event.type) {
 			case "agent_start":
 				this.#lastIntent = undefined;
+				this.ctx.clearFollowupSuggestions();
 				if (this.ctx.retryEscapeHandler) {
 					this.ctx.editor.onEscape = this.ctx.retryEscapeHandler;
 					this.ctx.retryEscapeHandler = undefined;
@@ -341,7 +342,7 @@ export class EventController {
 					if (this.ctx.followLoopActive) {
 						void this.ctx.autoPickFollowup();
 					} else {
-						void this.ctx.showFollowupSelector();
+						this.ctx.showFollowupSuggestions();
 					}
 				}
 				break;

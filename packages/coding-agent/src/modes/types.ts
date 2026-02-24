@@ -13,6 +13,7 @@ import type { ExitPlanModeDetails } from "../tools";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
 import type { CustomEditor } from "./components/custom-editor";
+import type { FollowupSuggestionsComponent } from "./components/followup-suggestions";
 import type { HookEditorComponent } from "./components/hook-editor";
 import type { HookInputComponent } from "./components/hook-input";
 import type { HookSelectorComponent } from "./components/hook-selector";
@@ -99,6 +100,7 @@ export interface InteractiveModeContext {
 	skillCommands: Map<string, string>;
 	todoPhases: TodoPhase[];
 	followupSuggestions: Array<{ prompt: string; label?: string; priority?: "must-have" | "nice-to-have" | "optional" }>;
+	followupSuggestionsComponent: FollowupSuggestionsComponent | undefined;
 
 	// Follow loop state
 	followLoopActive: boolean;
@@ -172,7 +174,8 @@ export interface InteractiveModeContext {
 	startFollowLoop(finishPrompt?: string): Promise<void>;
 	stopFollowLoop(): void;
 	autoPickFollowup(): Promise<void>;
-	showFollowupSelector(): Promise<void>;
+	showFollowupSuggestions(): void;
+	clearFollowupSuggestions(): void;
 	handleSTTToggle(): Promise<void>;
 	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void>;
 	openInBrowser(urlOrPath: string): void;

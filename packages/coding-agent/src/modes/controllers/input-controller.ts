@@ -135,6 +135,27 @@ export class InputController {
 			this.ctx.editor.setCustomKeyHandler(key, () => void this.ctx.handleSTTToggle());
 		}
 
+		this.ctx.editor.onDigitKey = (digit: number) => {
+			if (this.ctx.followupSuggestionsComponent) {
+				this.ctx.followupSuggestionsComponent.toggle(digit - 1);
+				this.ctx.ui.requestRender();
+			}
+		};
+
+		this.ctx.editor.onArrowKeyEmpty = (direction: "up" | "down"): boolean => {
+			const comp = this.ctx.followupSuggestionsComponent;
+			if (!comp) return false;
+			return direction === "up" ? comp.moveUp() : comp.moveDown();
+		};
+
+		this.ctx.editor.onSpaceKeyEmpty = (): boolean => {
+			const comp = this.ctx.followupSuggestionsComponent;
+			if (!comp || comp.focusedIndex < 0) return false;
+			comp.toggle(comp.focusedIndex);
+			this.ctx.ui.requestRender();
+			return true;
+		};
+
 		this.ctx.editor.onChange = (text: string) => {
 			const wasBashMode = this.ctx.isBashMode;
 			const wasPythonMode = this.ctx.isPythonMode;
@@ -150,6 +171,14 @@ export class InputController {
 	setupEditorSubmitHandler(): void {
 		this.ctx.editor.onSubmit = async (text: string) => {
 			text = text.trim();
+
+			// If editor is empty and followup suggestions have checked/focused items, confirm them
+			if (!text && this.ctx.followupSuggestionsComponent?.confirmSelection()) {
+				return;
+			}
+
+			// Clear inline followup suggestions when user submits anything else
+			this.ctx.clearFollowupSuggestions();
 
 			// Empty submit while streaming with queued messages: flush queues immediately
 			if (!text && this.ctx.session.isStreaming && this.ctx.session.queuedMessageCount > 0) {
@@ -375,7 +404,7 @@ export class InputController {
 		const text = this.ctx.editor.getText().trim();
 		if (!text) {
 			if (this.ctx.followupSuggestions.length > 0) {
-				await this.ctx.showFollowupSelector();
+				this.ctx.showFollowupSuggestions();
 			}
 			return;
 		}

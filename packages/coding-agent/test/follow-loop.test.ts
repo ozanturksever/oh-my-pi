@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test, vi } from "bun:test";
+import { FollowupSuggestionsComponent } from "@oh-my-pi/pi-coding-agent/modes/components/followup-suggestions";
 import { InteractiveMode } from "@oh-my-pi/pi-coding-agent/modes/interactive-mode";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 
@@ -21,7 +22,7 @@ function createMockContext(opts?: { loopMaxIterations?: number }) {
 	}> = [];
 	let followupEnabled = false;
 	let activeTools: string[] = [];
-	let showFollowupSelectorCalled = false;
+	let showFollowupSuggestionsCalled = false;
 	let loopMaxIterations = opts?.loopMaxIterations ?? 25;
 
 	const ctx = {
@@ -90,9 +91,11 @@ function createMockContext(opts?: { loopMaxIterations?: number }) {
 		showStatus: vi.fn((msg: string) => {
 			statusMessages.push(msg);
 		}),
-		showFollowupSelector: vi.fn(async () => {
-			showFollowupSelectorCalled = true;
+		showFollowupSuggestions: vi.fn(() => {
+			showFollowupSuggestionsCalled = true;
 		}),
+		clearFollowupSuggestions: vi.fn(),
+		followupSuggestionsComponent: undefined,
 
 		// Bound methods from InteractiveMode.prototype
 		startFollowLoop: null as unknown as (finishPrompt?: string) => Promise<void>,
@@ -110,11 +113,11 @@ function createMockContext(opts?: { loopMaxIterations?: number }) {
 		promptCalls,
 		statusMessages,
 		historyCalls,
-		get showFollowupSelectorCalled() {
-			return showFollowupSelectorCalled;
+		get showFollowupSuggestionsCalled() {
+			return showFollowupSuggestionsCalled;
 		},
-		resetShowFollowupSelectorCalled() {
-			showFollowupSelectorCalled = false;
+		resetShowFollowupSuggestionsCalled() {
+			showFollowupSuggestionsCalled = false;
 		},
 		setFollowupEnabled(v: boolean) {
 			followupEnabled = v;
@@ -388,7 +391,7 @@ describe("autoPickFollowup", () => {
 		await mock.ctx.autoPickFollowup();
 
 		expect(mock.ctx.followLoopActive).toBe(false);
-		expect(mock.showFollowupSelectorCalled).toBe(true);
+		expect(mock.showFollowupSuggestionsCalled).toBe(true);
 		// Should not have sent any prompt
 		expect(mock.promptCalls).toHaveLength(0);
 	});
@@ -401,7 +404,7 @@ describe("autoPickFollowup", () => {
 		await mock.ctx.autoPickFollowup();
 
 		expect(mock.ctx.followLoopActive).toBe(false);
-		expect(mock.showFollowupSelectorCalled).toBe(false);
+		expect(mock.showFollowupSuggestionsCalled).toBe(false);
 	});
 
 	test("treats suggestions without priority as non-must-have", async () => {
@@ -414,7 +417,7 @@ describe("autoPickFollowup", () => {
 		// No must-have found, so loop stops
 		expect(mock.ctx.followLoopActive).toBe(false);
 		// Selector shown for remaining suggestions
-		expect(mock.showFollowupSelectorCalled).toBe(true);
+		expect(mock.showFollowupSuggestionsCalled).toBe(true);
 		expect(mock.promptCalls).toHaveLength(0);
 	});
 
@@ -494,7 +497,7 @@ describe("autoPickFollowup max iteration limit", () => {
 
 		await mock.ctx.autoPickFollowup();
 
-		expect(mock.showFollowupSelectorCalled).toBe(true);
+		expect(mock.showFollowupSuggestionsCalled).toBe(true);
 	});
 
 	test("allows unlimited iterations when max is 0", async () => {
@@ -576,7 +579,7 @@ describe("follow loop integration", () => {
 		// Second pick - no must-have, loop stops
 		await mock.ctx.autoPickFollowup();
 		expect(mock.ctx.followLoopActive).toBe(false);
-		expect(mock.showFollowupSelectorCalled).toBe(true);
+		expect(mock.showFollowupSuggestionsCalled).toBe(true);
 	});
 
 	test("full cycle with finish prompt: start -> pick must-haves -> finish prompt sent", async () => {
@@ -815,7 +818,7 @@ describe("event-controller agent_end branching", () => {
 		followupSuggestions: Array<{ prompt: string; priority?: string }>;
 	}) {
 		const autoPickFollowup = vi.fn(async () => {});
-		const showFollowupSelector = vi.fn(async () => {});
+		const showFollowupSuggestions = vi.fn(() => {});
 		const ctx = {
 			loadingAnimation: undefined as any,
 			statusContainer: { clear: vi.fn() },
@@ -830,16 +833,18 @@ describe("event-controller agent_end branching", () => {
 			followupSuggestions: opts.followupSuggestions,
 			followLoopActive: opts.followLoopActive,
 			autoPickFollowup,
-			showFollowupSelector,
+			showFollowupSuggestions,
+			clearFollowupSuggestions: vi.fn(),
+			followupSuggestionsComponent: undefined,
 			isInitialized: true,
 			statusLine: { invalidate: vi.fn() },
 			updateEditorTopBorder: vi.fn(),
 		} as any;
-		return { ctx, autoPickFollowup, showFollowupSelector };
+		return { ctx, autoPickFollowup, showFollowupSuggestions };
 	}
 
 	test("calls autoPickFollowup when followLoopActive is true and suggestions exist", async () => {
-		const { ctx, autoPickFollowup, showFollowupSelector } = createEventControllerMocks({
+		const { ctx, autoPickFollowup, showFollowupSuggestions } = createEventControllerMocks({
 			followLoopActive: true,
 			followupSuggestions: [{ prompt: "fix it", priority: "must-have" }],
 		});
@@ -851,11 +856,11 @@ describe("event-controller agent_end branching", () => {
 		await Bun.sleep(0);
 
 		expect(autoPickFollowup).toHaveBeenCalledTimes(1);
-		expect(showFollowupSelector).not.toHaveBeenCalled();
+		expect(showFollowupSuggestions).not.toHaveBeenCalled();
 	});
 
-	test("calls showFollowupSelector when followLoopActive is false and suggestions exist", async () => {
-		const { ctx, autoPickFollowup, showFollowupSelector } = createEventControllerMocks({
+	test("calls showFollowupSuggestions when followLoopActive is false and suggestions exist", async () => {
+		const { ctx, autoPickFollowup, showFollowupSuggestions } = createEventControllerMocks({
 			followLoopActive: false,
 			followupSuggestions: [{ prompt: "add docs", priority: "nice-to-have" }],
 		});
@@ -865,13 +870,13 @@ describe("event-controller agent_end branching", () => {
 
 		await Bun.sleep(0);
 
-		expect(showFollowupSelector).toHaveBeenCalledTimes(1);
+		expect(showFollowupSuggestions).toHaveBeenCalledTimes(1);
 		expect(autoPickFollowup).not.toHaveBeenCalled();
 	});
 
 	test("calls neither when followupSuggestions is empty regardless of loop state", async () => {
 		for (const loopActive of [true, false]) {
-			const { ctx, autoPickFollowup, showFollowupSelector } = createEventControllerMocks({
+			const { ctx, autoPickFollowup, showFollowupSuggestions } = createEventControllerMocks({
 				followLoopActive: loopActive,
 				followupSuggestions: [],
 			});
@@ -882,13 +887,13 @@ describe("event-controller agent_end branching", () => {
 			await Bun.sleep(0);
 
 			expect(autoPickFollowup).not.toHaveBeenCalled();
-			expect(showFollowupSelector).not.toHaveBeenCalled();
+			expect(showFollowupSuggestions).not.toHaveBeenCalled();
 		}
 	});
 });
 
-describe("showFollowupSelector multi-select", () => {
-	function createFollowupSelectorMock() {
+describe("showFollowupSuggestions inline", () => {
+	function createInlineSuggestionsMock() {
 		const promptCalls: Array<{ text: string; opts?: unknown }> = [];
 		const historyCalls: string[] = [];
 		let followupSuggestions: Array<{
@@ -896,7 +901,7 @@ describe("showFollowupSelector multi-select", () => {
 			label?: string;
 			priority?: "must-have" | "nice-to-have" | "optional";
 		}> = [];
-		let multiSelectorResult: string[] | undefined;
+		const removedChildren: unknown[] = [];
 
 		const ctx = {
 			get followupSuggestions() {
@@ -905,6 +910,7 @@ describe("showFollowupSelector multi-select", () => {
 			set followupSuggestions(v: typeof followupSuggestions) {
 				followupSuggestions = v;
 			},
+			followupSuggestionsComponent: undefined as any,
 			session: {
 				isStreaming: false,
 				prompt: vi.fn(async (text: string, opts?: unknown) => {
@@ -918,158 +924,234 @@ describe("showFollowupSelector multi-select", () => {
 			},
 			ui: { requestRender: vi.fn() },
 			updatePendingMessagesDisplay: vi.fn(),
-			showHookMultiSelector: vi.fn(async () => multiSelectorResult),
-			showFollowupSelector: null as unknown as () => Promise<void>,
+			chatContainer: {
+				addChild: vi.fn(),
+				removeChild: vi.fn((child: unknown) => {
+					removedChildren.push(child);
+				}),
+			},
+			showFollowupSuggestions: null as unknown as () => void,
+			clearFollowupSuggestions: null as unknown as () => void,
 		};
 
-		ctx.showFollowupSelector = InteractiveMode.prototype.showFollowupSelector.bind(ctx as any);
+		ctx.showFollowupSuggestions = InteractiveMode.prototype.showFollowupSuggestions.bind(ctx as any);
+		ctx.clearFollowupSuggestions = InteractiveMode.prototype.clearFollowupSuggestions.bind(ctx as any);
 
 		return {
 			ctx,
 			promptCalls,
 			historyCalls,
+			get removedChildren() {
+				return removedChildren;
+			},
 			setSuggestions(v: typeof followupSuggestions) {
 				followupSuggestions = v;
-			},
-			setMultiSelectorResult(v: string[] | undefined) {
-				multiSelectorResult = v;
-				ctx.showHookMultiSelector = vi.fn(async () => v);
 			},
 		};
 	}
 
-	test("does nothing when no suggestions", async () => {
-		const mock = createFollowupSelectorMock();
+	test("does nothing when no suggestions", () => {
+		const mock = createInlineSuggestionsMock();
 		mock.setSuggestions([]);
 
-		await mock.ctx.showFollowupSelector();
+		mock.ctx.showFollowupSuggestions();
 
-		expect(mock.ctx.showHookMultiSelector).not.toHaveBeenCalled();
-		expect(mock.promptCalls).toHaveLength(0);
+		expect(mock.ctx.chatContainer.addChild).not.toHaveBeenCalled();
+		expect(mock.ctx.followupSuggestionsComponent).toBeUndefined();
 	});
 
-	test("returns without action when user cancels", async () => {
-		const mock = createFollowupSelectorMock();
-		mock.setSuggestions([{ prompt: "do stuff", label: "Do stuff" }]);
-		mock.setMultiSelectorResult(undefined);
-
-		await mock.ctx.showFollowupSelector();
-
-		expect(mock.promptCalls).toHaveLength(0);
-		expect(mock.historyCalls).toHaveLength(0);
-	});
-
-	test("returns without action when user selects empty list", async () => {
-		const mock = createFollowupSelectorMock();
-		mock.setSuggestions([{ prompt: "do stuff" }]);
-		mock.setMultiSelectorResult([]);
-
-		await mock.ctx.showFollowupSelector();
-
-		expect(mock.promptCalls).toHaveLength(0);
-	});
-
-	test("single selection sends one prompt", async () => {
-		const mock = createFollowupSelectorMock();
+	test("renders component to chat container", () => {
+		const mock = createInlineSuggestionsMock();
 		mock.setSuggestions([
 			{ prompt: "fix imports", label: "Fix imports" },
 			{ prompt: "add tests", label: "Add tests" },
 		]);
-		mock.setMultiSelectorResult(["Fix imports"]);
 
-		await mock.ctx.showFollowupSelector();
+		mock.ctx.showFollowupSuggestions();
+
+		expect(mock.ctx.followupSuggestionsComponent).toBeDefined();
+		expect(mock.ctx.chatContainer.addChild).toHaveBeenCalled();
+		expect(mock.ctx.ui.requestRender).toHaveBeenCalled();
+	});
+
+	test("toggle + confirm sends single selected prompt", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([
+			{ prompt: "fix imports", label: "Fix imports" },
+			{ prompt: "add tests", label: "Add tests" },
+		]);
+
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+		expect(comp).toBeDefined();
+
+		// Toggle first, then confirm
+		comp.toggle(0);
+		comp.confirmSelection();
 
 		expect(mock.promptCalls).toHaveLength(1);
 		expect(mock.promptCalls[0].text).toBe("fix imports");
 		expect(mock.historyCalls).toEqual(["fix imports"]);
+		// Selected removed, one remains
+		expect(mock.ctx.followupSuggestions).toHaveLength(1);
+		expect(mock.ctx.followupSuggestions[0].prompt).toBe("add tests");
 	});
 
-	test("multiple selections are joined with double newline", async () => {
-		const mock = createFollowupSelectorMock();
-		mock.setSuggestions([
-			{ prompt: "fix imports", label: "Fix imports" },
-			{ prompt: "add error handling", label: "Add error handling" },
-			{ prompt: "run tests", label: "Run tests" },
-		]);
-		mock.setMultiSelectorResult(["Fix imports", "Run tests"]);
-
-		await mock.ctx.showFollowupSelector();
-
-		expect(mock.promptCalls).toHaveLength(1);
-		expect(mock.promptCalls[0].text).toBe("fix imports\n\nrun tests");
-	});
-
-	test("multiple selections: all three joined correctly", async () => {
-		const mock = createFollowupSelectorMock();
-		mock.setSuggestions([
-			{ prompt: "first task", label: "First" },
-			{ prompt: "second task", label: "Second" },
-			{ prompt: "third task", label: "Third" },
-		]);
-		mock.setMultiSelectorResult(["First", "Second", "Third"]);
-
-		await mock.ctx.showFollowupSelector();
-
-		expect(mock.promptCalls[0].text).toBe("first task\n\nsecond task\n\nthird task");
-		expect(mock.historyCalls).toEqual(["first task", "second task", "third task"]);
-	});
-
-	test("selected items are removed from suggestions", async () => {
-		const mock = createFollowupSelectorMock();
+	test("multi-select joins prompts with double newline", () => {
+		const mock = createInlineSuggestionsMock();
 		mock.setSuggestions([
 			{ prompt: "A", label: "A" },
 			{ prompt: "B", label: "B" },
 			{ prompt: "C", label: "C" },
 		]);
-		mock.setMultiSelectorResult(["A", "C"]);
 
-		await mock.ctx.showFollowupSelector();
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+		comp.toggle(0);
+		comp.toggle(2);
+		comp.confirmSelection();
 
+		expect(mock.promptCalls).toHaveLength(1);
+		expect(mock.promptCalls[0].text).toBe("A\n\nC");
+		expect(mock.historyCalls).toEqual(["A", "C"]);
+		// B remains
 		expect(mock.ctx.followupSuggestions).toHaveLength(1);
 		expect(mock.ctx.followupSuggestions[0].prompt).toBe("B");
 	});
 
-	test("each selected prompt is added to editor history", async () => {
-		const mock = createFollowupSelectorMock();
-		mock.setSuggestions([
-			{ prompt: "prompt one", label: "One" },
-			{ prompt: "prompt two", label: "Two" },
-		]);
-		mock.setMultiSelectorResult(["One", "Two"]);
+	test("toggle twice unchecks an item", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([{ prompt: "A" }, { prompt: "B" }]);
 
-		await mock.ctx.showFollowupSelector();
-
-		expect(mock.historyCalls).toEqual(["prompt one", "prompt two"]);
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+		comp.toggle(0);
+		expect(comp.checkedIndices).toEqual([0]);
+		comp.toggle(0);
+		expect(comp.checkedIndices).toEqual([]);
 	});
 
-	test("uses prompt as label when no label provided", async () => {
-		const mock = createFollowupSelectorMock();
-		mock.setSuggestions([{ prompt: "fix the bug" }, { prompt: "write tests" }]);
-		mock.setMultiSelectorResult(["fix the bug", "write tests"]);
-
-		await mock.ctx.showFollowupSelector();
-
-		expect(mock.promptCalls[0].text).toBe("fix the bug\n\nwrite tests");
-	});
-
-	test("uses followUp streaming behavior when session is streaming", async () => {
-		const mock = createFollowupSelectorMock();
+	test("uses followUp streaming behavior when session is streaming", () => {
+		const mock = createInlineSuggestionsMock();
 		(mock.ctx.session as any).isStreaming = true;
 		mock.setSuggestions([{ prompt: "task A", label: "A" }]);
-		mock.setMultiSelectorResult(["A"]);
 
-		await mock.ctx.showFollowupSelector();
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+		comp.toggle(0);
+		comp.confirmSelection();
 
 		expect(mock.ctx.session.prompt).toHaveBeenCalledWith("task A", { streamingBehavior: "followUp" });
 	});
 
-	test("calls showHookMultiSelector with correct title and labels", async () => {
-		const mock = createFollowupSelectorMock();
-		mock.setSuggestions([{ prompt: "fix imports", label: "Fix imports" }, { prompt: "add tests" }]);
-		mock.setMultiSelectorResult(undefined);
+	test("confirming clears component from chat", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([{ prompt: "fix it" }]);
 
-		await mock.ctx.showFollowupSelector();
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+		comp.toggle(0);
+		comp.confirmSelection();
 
-		expect(mock.ctx.showHookMultiSelector).toHaveBeenCalledWith("Suggested next steps", ["Fix imports", "add tests"]);
+		expect(mock.ctx.followupSuggestionsComponent).toBeUndefined();
+	});
+
+	test("out-of-bounds toggle is ignored", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([{ prompt: "only one" }]);
+
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+		comp.toggle(5);
+		expect(comp.checkedIndices).toEqual([]);
+	});
+
+	test("moveDown cycles through suggestions", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([{ prompt: "A" }, { prompt: "B" }, { prompt: "C" }]);
+
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+
+		expect(comp.focusedIndex).toBe(-1);
+		comp.moveDown();
+		expect(comp.focusedIndex).toBe(0);
+		comp.moveDown();
+		expect(comp.focusedIndex).toBe(1);
+		comp.moveDown();
+		expect(comp.focusedIndex).toBe(2);
+		// Wraps around
+		comp.moveDown();
+		expect(comp.focusedIndex).toBe(0);
+	});
+
+	test("moveUp cycles through suggestions", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([{ prompt: "A" }, { prompt: "B" }, { prompt: "C" }]);
+
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+
+		// From -1, up goes to last
+		comp.moveUp();
+		expect(comp.focusedIndex).toBe(2);
+		comp.moveUp();
+		expect(comp.focusedIndex).toBe(1);
+		comp.moveUp();
+		expect(comp.focusedIndex).toBe(0);
+		// Wraps to last
+		comp.moveUp();
+		expect(comp.focusedIndex).toBe(2);
+	});
+
+	test("confirmSelection with no checked items sends focused item", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([{ prompt: "A" }, { prompt: "B" }]);
+
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+
+		comp.moveDown(); // focus 0
+		comp.moveDown(); // focus 1
+		const handled = comp.confirmSelection();
+
+		expect(handled).toBe(true);
+		expect(mock.promptCalls).toHaveLength(1);
+		expect(mock.promptCalls[0].text).toBe("B");
+	});
+
+	test("confirmSelection prefers checked over focused", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([{ prompt: "A" }, { prompt: "B" }, { prompt: "C" }]);
+
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+
+		comp.toggle(0); // check A, focuses 0
+		comp.moveDown(); // focus 1 (B not checked)
+		const handled = comp.confirmSelection();
+
+		// Should send only the checked item (A), not the focused (B)
+		expect(handled).toBe(true);
+		expect(mock.promptCalls).toHaveLength(1);
+		expect(mock.promptCalls[0].text).toBe("A");
+	});
+
+	test("confirmSelection returns false when nothing focused or checked", () => {
+		const mock = createInlineSuggestionsMock();
+		mock.setSuggestions([{ prompt: "A" }]);
+
+		mock.ctx.showFollowupSuggestions();
+		const comp = mock.ctx.followupSuggestionsComponent;
+
+		const handled = comp.confirmSelection();
+		expect(handled).toBe(false);
+		expect(mock.promptCalls).toHaveLength(0);
+	});
+
+	test("moveDown returns false when no suggestions", () => {
+		const comp = new FollowupSuggestionsComponent([], () => {});
+		expect(comp.moveDown()).toBe(false);
+		expect(comp.moveUp()).toBe(false);
 	});
 });
