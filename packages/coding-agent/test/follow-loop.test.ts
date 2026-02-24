@@ -63,12 +63,13 @@ function createMockContext(opts?: { loopMaxIterations?: number }) {
 			},
 		},
 		session: {
+			isStreaming: true,
 			getActiveToolNames: () => activeTools,
 			setActiveToolsByName: vi.fn(async (tools: string[]) => {
 				activeTools = tools;
 			}),
-			prompt: vi.fn(async (text: string) => {
-				promptCalls.push(text);
+			prompt: vi.fn(async (_text: string, _options?: unknown) => {
+				promptCalls.push(_text);
 			}),
 		},
 		statusLine: {

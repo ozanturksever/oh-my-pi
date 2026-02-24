@@ -806,7 +806,11 @@ export class InteractiveMode implements InteractiveModeContext {
 				// Send finish prompt as final evaluation
 				const finishPrompt = this.followLoopFinishPrompt;
 				this.stopFollowLoop();
-				setTimeout(() => void this.session.prompt(finishPrompt), 0);
+				if (this.session.isStreaming) {
+					void this.session.prompt(finishPrompt, { streamingBehavior: "followUp" });
+				} else {
+					void this.session.prompt(finishPrompt);
+				}
 				return;
 			}
 			this.stopFollowLoop();
@@ -843,11 +847,13 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.showStatus(`Follow loop (${this.followLoopIterations}): executing "${displayLabel}"`);
 
 		this.editor.addToHistory(selected.prompt);
-		setTimeout(() => {
+		if (this.session.isStreaming) {
+			void this.session.prompt(selected.prompt, { streamingBehavior: "followUp" });
+		} else {
 			void this.session.prompt(selected.prompt);
-			this.updatePendingMessagesDisplay();
-			this.ui.requestRender();
-		}, 0);
+		}
+		this.updatePendingMessagesDisplay();
+		this.ui.requestRender();
 	}
 
 	async handleExitPlanModeTool(details: ExitPlanModeDetails): Promise<void> {
