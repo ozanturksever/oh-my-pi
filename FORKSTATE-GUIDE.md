@@ -2,7 +2,7 @@
 
 Delta between this fork (`ozanturksever/oh-my-pi`) and upstream (`can1357/oh-my-pi`).
 
-Net effect: +3,459 / -276 lines vs upstream. Upstream baseline: `f838068` (upstream/main, `chore: bump version to 13.1.2`).
+Net effect: +3,459 / -276 lines vs upstream at fork point. Upstream baseline: `d942f04` (upstream/main, `fix: align task-template test expectations with trimmed prompt output`). Last merged: 2026-02-24.
 
 ---
 

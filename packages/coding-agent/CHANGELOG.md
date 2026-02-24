@@ -2,44 +2,60 @@
 
 ## [Unreleased]
 
-## [13.4.0] - 2026-02-23
+## [13.2.1-fork.1] - 2026-02-24
 
 ### Added
 
 - Added multi-select mode to `HookSelectorComponent` with space to toggle, `a` to select all, and enter to confirm
 - Added `showHookMultiSelector` to `InteractiveModeContext` and `ExtensionUiController`
 - Added `multiSelect` method to `ExtensionUIContext` for extensions to present multi-select prompts
-
-### Changed
-
-- Followup selector now supports multi-select: pick multiple suggestions at once, joined with double newline
-- Refactored `ask` tool multi-select to use native `ui.multiSelect` instead of a looping single-select pattern
-
-## [13.3.0] - 2026-02-23
-
-### Added
-
 - Added `priority` field (`must-have`, `nice-to-have`, `optional`) to `suggest_followups` tool for categorizing followup importance
 - Added `/followloop` command (alias `/floop`) to auto-execute must-have followup suggestions in a loop
 - Added `/followloop status` subcommand showing loop state, iteration count, finish condition, and pending suggestions
 - Added `followup.loopMaxIterations` setting to cap auto-execution iterations (default: 25, 0 for unlimited)
 - Added `follow_loop` status line segment with iteration counter
-
-## [13.2.1] - 2026-02-23
+- Added followup suggestions feature: after each agent turn, show ~3 contextual followup suggestions the user can select as their next prompt
+- Added `/followup` command to toggle followup suggestions on/off
+- Added `followup.enabled` setting (default: off) under Agent tab
 
 ### Changed
 
+- Followup selector now supports multi-select: pick multiple suggestions at once, joined with double newline
+- Refactored `ask` tool multi-select to use native `ui.multiSelect` instead of a looping single-select pattern
 - Followup selector now queues selected prompt as a message instead of pre-filling editor
 - Selected followup prompts are added to editor history for recall with up-arrow
 - Remaining followup suggestions persist after selection; re-open with ctrl+enter
 
+## [13.2.1] - 2026-02-24
+
+### Fixed
+- Fixed changelog tools to enforce category-specific arrays and reuse the shared category list for generation
+- Non-interactive environment variables (pager, editor, prompt suppression) were not applied to non-PTY bash execution, causing commands to potentially block on pagers or prompts
+
+### Changed
+
+- Extracted non-interactive environment config from `bash-interactive.ts` into shared `non-interactive-env.ts` module, applied consistently to all bash execution paths
+
 ## [13.2.0] - 2026-02-23
+### Breaking Changes
 
-### Added
+- Made `description` field required in CustomTool interface
 
-- Added followup suggestions feature: after each agent turn, show ~3 contextual followup suggestions the user can select as their next prompt
-- Added `/followup` command to toggle followup suggestions on/off
-- Added `followup.enabled` setting (default: off) under Agent tab
+### Changed
+
+- Reorganized imports from `@oh-my-pi/pi-utils/dirs` to consolidate with main `@oh-my-pi/pi-utils` exports for cleaner dependency management
+- Renamed `loadSkillsFromDir` to `scanSkillsFromDir` with updated interface for improved clarity on skill discovery behavior
+- Moved `tryParseJson` utility from local scrapers module to `@oh-my-pi/pi-utils` for centralized JSON parsing
+- Simplified patch module exports by consolidating type re-exports with `export * from './types'`
+- Removed `emitCustomToolSessionEvent` method from AgentSession for streamlined session lifecycle management
+- Changed skill discovery from recursive to non-recursive (one level deep only) for improved performance and clarity
+- Simplified skill loading logic by removing recursive directory traversal and consolidating ignore rule handling
+
+### Removed
+
+- Removed `parseJSON` helper function from discovery module (replaced by `tryParseJson` from pi-utils)
+- Removed backwards compatibility comment from `AskToolDetails.question` field
+- Removed unused SSH resource cleanup functions `closeAllConnections` and `unmountAll` from session imports
 
 ## [13.1.2] - 2026-02-23
 ### Breaking Changes
